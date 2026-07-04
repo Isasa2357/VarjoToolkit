@@ -1,8 +1,13 @@
-﻿cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 3.20)
 
-project(VarjoServices LANGUAGES CXX)
+project(VarjoToolkit LANGUAGES CXX)
 
-option(VARJOSERVICES_BUILD_SAMPLES "Build VarjoServices sample applications" ON)
+option(VARJOTOOLKIT_BUILD_SAMPLES "Build VarjoToolkit sample applications" ON)
+
+# Backward compatibility for the previous option name.
+if (DEFINED VARJOSERVICES_BUILD_SAMPLES)
+    set(VARJOTOOLKIT_BUILD_SAMPLES ${VARJOSERVICES_BUILD_SAMPLES})
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,42 +74,44 @@ if (NOT BOOST_INCLUDE_DIR)
     message(FATAL_ERROR "Boost headers were not found. VarjoEyeTrackingService uses boost/circular_buffer.hpp.")
 endif()
 
-add_library(VarjoServices STATIC
+add_library(VarjoToolkit STATIC
     src/VarjoEyeTrackingService.cpp
     src/VarjoIMUService.cpp
     src/VarjoVSTService.cpp
+    src/VarjoEyeCameraService.cpp
+    src/VarjoEnvironmentCubemapService.cpp
     src/VarjoTimestampMapping.cpp
 )
 
-target_include_directories(VarjoServices
+add_library(VarjoToolkit::VarjoToolkit ALIAS VarjoToolkit)
+# Compatibility alias for older sample/application CMakeLists.
+add_library(VarjoServices ALIAS VarjoToolkit)
+
+target_include_directories(VarjoToolkit
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/VarjoServices/EyeTracking"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/VarjoServices/IMU"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/VarjoServices/VST"
-        "${CMAKE_CURRENT_SOURCE_DIR}/include/VarjoServices/Utilities"
         "${VARJO_INCLUDE_DIR}"
         "${BOOST_INCLUDE_DIR}"
 )
 
-target_link_libraries(VarjoServices
+target_link_libraries(VarjoToolkit
     PUBLIC
         "${VARJO_LIBRARY}"
 )
 
-target_compile_definitions(VarjoServices
+target_compile_definitions(VarjoToolkit
     PUBLIC
         NOMINMAX
         WIN32_LEAN_AND_MEAN
 )
 
 if (MSVC)
-    target_compile_options(VarjoServices PRIVATE /utf-8 /W4 /permissive-)
+    target_compile_options(VarjoToolkit PRIVATE /utf-8 /W4 /permissive-)
 else()
-    target_compile_options(VarjoServices PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(VarjoToolkit PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
-if (VARJOSERVICES_BUILD_SAMPLES)
+if (VARJOTOOLKIT_BUILD_SAMPLES)
     add_subdirectory(samples/ServiceLoggerSample)
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT VarjoServiceLoggerSample)
 endif()

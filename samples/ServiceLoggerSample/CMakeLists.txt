@@ -4,7 +4,7 @@ add_executable(VarjoServiceLoggerSample
 
 target_link_libraries(VarjoServiceLoggerSample
     PRIVATE
-        VarjoServices
+        VarjoToolkit::VarjoToolkit
 )
 
 target_compile_definitions(VarjoServiceLoggerSample

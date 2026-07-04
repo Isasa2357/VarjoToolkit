@@ -1,14 +1,16 @@
-﻿#ifndef NOMINMAX
+#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 
-#include <VarjoServices/EyeTracking/VarjoEyeTrackingService.hpp>
-#include <VarjoServices/IMU/VarjoIMUService.hpp>
-#include <VarjoServices/Utilities/VarjoTimestampMapping.hpp>
-#include <VarjoServices/VST/VarjoVSTService.hpp>
+#include <VarjoToolkit/Services/EyeTracking/VarjoEyeTrackingService.hpp>
+#include <VarjoToolkit/Services/IMU/VarjoIMUService.hpp>
+#include <VarjoToolkit/Services/VST/VarjoVSTService.hpp>
+#include <VarjoToolkit/Services/EyeCamera/VarjoEyeCameraService.hpp>
+#include <VarjoToolkit/Services/Cubemap/VarjoEnvironmentCubemapService.hpp>
+#include <VarjoToolkit/Utilities/VarjoTimestampMapping.hpp>
 
 #include <Varjo.h>
 
@@ -48,6 +50,8 @@ struct Options {
     bool enableEyeTracking = true;
     bool enableIMU = true;
     bool enableVST = true;
+    bool enableEyeCamera = true;
+    bool enableCubemap = true;
     bool enableTimestampMapping = true;
     bool help = false;
 };
@@ -66,11 +70,15 @@ void printUsage()
         << "  --no-eye            Disable VarjoEyeTrackingService\n"
         << "  --no-imu            Disable VarjoIMUService\n"
         << "  --no-vst            Disable VarjoVSTService\n"
+        << "  --no-eye-camera     Disable VarjoEyeCameraService\n"
+        << "  --no-cubemap        Disable VarjoEnvironmentCubemapService\n"
         << "  --no-timestamp      Disable timestamp mapping utility CSV output\n"
         << "  --help              Show this message\n"
         << "\n"
         << "Notes:\n"
         << "  VST logging writes MP4 through ffmpeg. Put ffmpeg.exe in PATH, or use --no-vst.\n"
+        << "  EyeCamera and EnvironmentCubemap logging write raw binary buffers plus metadata CSV.\n"
+        << "  DataStream-based services require the corresponding Varjo Base license/capability.\n"
         << "  Eye tracking must be allowed and calibrated in Varjo Base.\n";
 }
 
@@ -127,6 +135,14 @@ bool parseArguments(int argc, char** argv, Options& options)
         }
         if (arg == "--no-vst") {
             options.enableVST = false;
+            continue;
+        }
+        if (arg == "--no-eye-camera") {
+            options.enableEyeCamera = false;
+            continue;
+        }
+        if (arg == "--no-cubemap") {
+            options.enableCubemap = false;
             continue;
         }
         if (arg == "--no-timestamp") {
@@ -233,6 +249,8 @@ int main(int argc, char** argv)
     std::unique_ptr<VarjoEyeTrackingService> eyeTrackingService;
     std::unique_ptr<VarjoIMUService> imuService;
     std::unique_ptr<VarjoVSTService> vstService;
+    std::unique_ptr<VarjoEyeCameraService> eyeCameraService;
+    std::unique_ptr<VarjoEnvironmentCubemapService> cubemapService;
     VarjoTimestampMapping timestampMapping(session);
     std::ofstream timestampMappingLog;
     uint64_t timestampMappingRows = 0;
@@ -250,6 +268,8 @@ int main(int argc, char** argv)
     bool eyeTrackingStarted = false;
     bool imuStarted = false;
     bool vstStarted = false;
+    bool eyeCameraStarted = false;
+    bool cubemapStarted = false;
 
     if (options.enableEyeTracking) {
         eyeTrackingService = std::make_unique<VarjoEyeTrackingService>(
@@ -281,7 +301,23 @@ int main(int argc, char** argv)
         }
     }
 
-    if (!eyeTrackingStarted && !imuStarted && !vstStarted && !options.enableTimestampMapping) {
+    if (options.enableEyeCamera) {
+        eyeCameraService = std::make_unique<VarjoEyeCameraService>(session, options.outputDirectory.wstring(), L"sample", 180);
+        eyeCameraStarted = eyeCameraService->start();
+        if (!eyeCameraStarted) {
+            std::wcerr << L"VarjoEyeCameraService failed to start: " << eyeCameraService->lastError() << L"\n";
+        }
+    }
+
+    if (options.enableCubemap) {
+        cubemapService = std::make_unique<VarjoEnvironmentCubemapService>(session, options.outputDirectory.wstring(), L"sample", 90);
+        cubemapStarted = cubemapService->start();
+        if (!cubemapStarted) {
+            std::wcerr << L"VarjoEnvironmentCubemapService failed to start: " << cubemapService->lastError() << L"\n";
+        }
+    }
+
+    if (!eyeTrackingStarted && !imuStarted && !vstStarted && !eyeCameraStarted && !cubemapStarted && !options.enableTimestampMapping) {
         std::cerr << "No service or utility output could be started.\n";
         return 2;
     }
@@ -338,6 +374,15 @@ int main(int argc, char** argv)
                           << " vstR=" << vstService->rightFrameCount()
                           << " vstDrop=" << vstService->droppedFrameCount();
             }
+            if (eyeCameraStarted && eyeCameraService) {
+                std::cout << " eyeCamL=" << eyeCameraService->leftFrameCount()
+                          << " eyeCamR=" << eyeCameraService->rightFrameCount()
+                          << " eyeCamDrop=" << eyeCameraService->droppedFrameCount();
+            }
+            if (cubemapStarted && cubemapService) {
+                std::cout << " cubemap=" << cubemapService->frameCount()
+                          << " cubemapDrop=" << cubemapService->droppedFrameCount();
+            }
             std::cout << "\n";
         }
 
@@ -350,6 +395,12 @@ int main(int argc, char** argv)
     }
 
     std::cout << "Stopping services...\n";
+    if (cubemapService) {
+        cubemapService->stop();
+    }
+    if (eyeCameraService) {
+        eyeCameraService->stop();
+    }
     if (vstService) {
         vstService->stop();
     }
@@ -368,6 +419,20 @@ int main(int argc, char** argv)
                    << L"  right video: " << paths.right_video << L"\n"
                    << L"  left metadata: " << paths.left_metadata_csv << L"\n"
                    << L"  right metadata: " << paths.right_metadata_csv << L"\n";
+    }
+    if (eyeCameraService) {
+        const auto paths = eyeCameraService->paths();
+        std::wcout << L"EyeCamera outputs:\n"
+                   << L"  left raw: " << paths.left_raw << L"\n"
+                   << L"  right raw: " << paths.right_raw << L"\n"
+                   << L"  left metadata: " << paths.left_metadata_csv << L"\n"
+                   << L"  right metadata: " << paths.right_metadata_csv << L"\n";
+    }
+    if (cubemapService) {
+        const auto paths = cubemapService->paths();
+        std::wcout << L"EnvironmentCubemap outputs:\n"
+                   << L"  raw: " << paths.raw << L"\n"
+                   << L"  metadata: " << paths.metadata_csv << L"\n";
     }
 
     return 0;

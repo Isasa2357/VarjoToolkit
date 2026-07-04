@@ -2,7 +2,7 @@
 #define NOMINMAX
 #endif
 
-#include <VarjoServices/IMU/VarjoIMUService.hpp>
+#include <VarjoToolkit/Services/IMU/VarjoIMUService.hpp>
 
 #include <Windows.h>
 

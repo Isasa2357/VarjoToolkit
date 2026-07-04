@@ -2,7 +2,7 @@
 #define NOMINMAX
 #endif
 
-#include <VarjoServices/EyeTracking/VarjoEyeTrackingService.hpp>
+#include <VarjoToolkit/Services/EyeTracking/VarjoEyeTrackingService.hpp>
 
 #include <Windows.h>
 

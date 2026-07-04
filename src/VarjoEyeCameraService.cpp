@@ -1,8 +1,11 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
 
-#include <VarjoToolkit/Services/VST/VarjoVSTService.hpp>
+#include <VarjoToolkit/Services/EyeCamera/VarjoEyeCameraService.hpp>
 
 #include <Windows.h>
 
@@ -12,37 +15,19 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
-#include <stdexcept>
 
 namespace {
 
 int64_t systemTimeUnixUsFromTimePoint(std::chrono::system_clock::time_point tp)
 {
-    return std::chrono::duration_cast<std::chrono::microseconds>(
-        tp.time_since_epoch()).count();
-}
-
-std::wstring quoteCommandArgument(const std::filesystem::path& path)
-{
-    std::wstring value = path.wstring();
-    std::wstring out;
-    out.reserve(value.size() + 2);
-    out.push_back(L'"');
-    for (wchar_t ch : value) {
-        if (ch == L'"') {
-            out.push_back(L'\\');
-        }
-        out.push_back(ch);
-    }
-    out.push_back(L'"');
-    return out;
+    return std::chrono::duration_cast<std::chrono::microseconds>(tp.time_since_epoch()).count();
 }
 
 std::string formatSystemClockUtcIso8601(std::chrono::system_clock::time_point tp)
 {
-    const auto us_since_epoch = std::chrono::duration_cast<std::chrono::microseconds>(tp.time_since_epoch());
-    const auto sec_since_epoch = std::chrono::duration_cast<std::chrono::seconds>(us_since_epoch);
-    const int micros = static_cast<int>((us_since_epoch - sec_since_epoch).count());
+    const auto usSinceEpoch = std::chrono::duration_cast<std::chrono::microseconds>(tp.time_since_epoch());
+    const auto secSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(usSinceEpoch);
+    const int micros = static_cast<int>((usSinceEpoch - secSinceEpoch).count());
 
     const std::time_t tt = std::chrono::system_clock::to_time_t(tp);
     std::tm tm{};
@@ -57,14 +42,26 @@ std::string formatSystemClockUtcIso8601(std::chrono::system_clock::time_point tp
 void writeMatrixCsv(std::ostream& os, const varjo_Matrix& matrix)
 {
     for (int i = 0; i < 16; ++i) {
-        if (i != 0) os << ',';
+        if (i != 0) {
+            os << ',';
+        }
         os << matrix.value[i];
     }
 }
 
+int64_t streamConfigScore(const varjo_StreamConfig& cfg)
+{
+    int64_t score = static_cast<int64_t>(cfg.frameRate) * 1000000000LL +
+        static_cast<int64_t>(cfg.width) * static_cast<int64_t>(cfg.height);
+    if (cfg.format == varjo_TextureFormat_Y8_UNORM) {
+        score += 1000000000000000LL;
+    }
+    return score;
+}
+
 } // namespace
 
-VarjoVSTService::VarjoVSTService(
+VarjoEyeCameraService::VarjoEyeCameraService(
     const std::shared_ptr<varjo_Session>& session,
     const std::wstring& output_directory,
     const std::wstring& base_filename,
@@ -74,18 +71,18 @@ VarjoVSTService::VarjoVSTService(
     , base_filename_(base_filename)
     , queue_capacity_((queue_capacity > 0) ? queue_capacity : 1)
 {
-    left_video_path_ = output_directory_ / (base_filename_ + L"_vst_left.mp4");
-    right_video_path_ = output_directory_ / (base_filename_ + L"_vst_right.mp4");
-    left_metadata_path_ = output_directory_ / (base_filename_ + L"_vst_left_metadata.csv");
-    right_metadata_path_ = output_directory_ / (base_filename_ + L"_vst_right_metadata.csv");
+    left_raw_path_ = output_directory_ / (base_filename_ + L"_eye_camera_left.raw");
+    right_raw_path_ = output_directory_ / (base_filename_ + L"_eye_camera_right.raw");
+    left_metadata_path_ = output_directory_ / (base_filename_ + L"_eye_camera_left_metadata.csv");
+    right_metadata_path_ = output_directory_ / (base_filename_ + L"_eye_camera_right_metadata.csv");
 }
 
-VarjoVSTService::~VarjoVSTService()
+VarjoEyeCameraService::~VarjoEyeCameraService()
 {
     stop();
 }
 
-bool VarjoVSTService::start()
+bool VarjoEyeCameraService::start()
 {
     stop();
 
@@ -119,21 +116,21 @@ bool VarjoVSTService::start()
     }
 
     stop_requested_.store(false);
-    writer_thread_ = std::thread(&VarjoVSTService::writerMain, this);
+    writer_thread_ = std::thread(&VarjoEyeCameraService::writerMain, this);
     SetThreadPriority(static_cast<HANDLE>(writer_thread_.native_handle()), THREAD_PRIORITY_BELOW_NORMAL);
 
     varjo_StartDataStream(
         session_.get(),
         stream_id_,
         channel_flags_,
-        &VarjoVSTService::onFrameReceivedStatic,
+        &VarjoEyeCameraService::onFrameReceivedStatic,
         this);
 
     stream_started_.store(true);
     return true;
 }
 
-void VarjoVSTService::stop()
+void VarjoEyeCameraService::stop()
 {
     if (stream_started_.load() && session_ && stream_id_ != varjo_InvalidId) {
         varjo_StopDataStream(session_.get(), stream_id_);
@@ -153,53 +150,53 @@ void VarjoVSTService::stop()
     running_ = false;
 }
 
-bool VarjoVSTService::isRunning() const
+bool VarjoEyeCameraService::isRunning() const
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
     return running_;
 }
 
-std::wstring VarjoVSTService::lastError() const
+std::wstring VarjoEyeCameraService::lastError() const
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
     return last_error_;
 }
 
-VarjoVSTService::Paths VarjoVSTService::paths() const
+VarjoEyeCameraService::Paths VarjoEyeCameraService::paths() const
 {
     Paths p{};
-    p.left_video = left_video_path_.wstring();
-    p.right_video = right_video_path_.wstring();
+    p.left_raw = left_raw_path_.wstring();
+    p.right_raw = right_raw_path_.wstring();
     p.left_metadata_csv = left_metadata_path_.wstring();
     p.right_metadata_csv = right_metadata_path_.wstring();
     return p;
 }
 
-uint64_t VarjoVSTService::leftFrameCount() const
+uint64_t VarjoEyeCameraService::leftFrameCount() const
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
     return left_frame_count_;
 }
 
-uint64_t VarjoVSTService::rightFrameCount() const
+uint64_t VarjoEyeCameraService::rightFrameCount() const
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
     return right_frame_count_;
 }
 
-uint64_t VarjoVSTService::droppedFrameCount() const
+uint64_t VarjoEyeCameraService::droppedFrameCount() const
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
     return dropped_frame_count_;
 }
 
-uint64_t VarjoVSTService::writeFailureCount() const
+uint64_t VarjoEyeCameraService::writeFailureCount() const
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
     return write_failure_count_;
 }
 
-bool VarjoVSTService::selectStreamConfig()
+bool VarjoEyeCameraService::selectStreamConfig()
 {
     const int32_t config_count = varjo_GetDataStreamConfigCount(session_.get());
     if (config_count <= 0) {
@@ -215,15 +212,17 @@ bool VarjoVSTService::selectStreamConfig()
     varjo_StreamConfig best{};
 
     for (const auto& cfg : configs) {
-        if (cfg.streamType != varjo_StreamType_DistortedColor) continue;
-        if (cfg.format != varjo_TextureFormat_NV12) continue;
-        if (cfg.bufferType != varjo_BufferType_CPU) continue;
-        if ((cfg.channelFlags & varjo_ChannelFlag_Left) == 0) continue;
-        if ((cfg.channelFlags & varjo_ChannelFlag_Right) == 0) continue;
+        if (cfg.streamType != varjo_StreamType_EyeCamera) {
+            continue;
+        }
+        if (cfg.bufferType != varjo_BufferType_CPU) {
+            continue;
+        }
+        if ((cfg.channelFlags & (varjo_ChannelFlag_Left | varjo_ChannelFlag_Right)) == 0) {
+            continue;
+        }
 
-        const int64_t score =
-            static_cast<int64_t>(cfg.frameRate) * 1000000000LL +
-            static_cast<int64_t>(cfg.width) * static_cast<int64_t>(cfg.height);
+        const int64_t score = streamConfigScore(cfg);
         if (!found || score > best_score) {
             found = true;
             best_score = score;
@@ -232,7 +231,7 @@ bool VarjoVSTService::selectStreamConfig()
     }
 
     if (!found) {
-        setLastError(L"No CPU NV12 DistortedColor VST stream with both left and right channels was found");
+        setLastError(L"No CPU EyeCamera data stream with left/right channel buffer was found");
         return false;
     }
 
@@ -242,28 +241,32 @@ bool VarjoVSTService::selectStreamConfig()
     return true;
 }
 
-bool VarjoVSTService::openOutputs()
+bool VarjoEyeCameraService::openOutputs()
 {
     std::error_code ec;
     std::filesystem::create_directories(output_directory_, ec);
 
-    if (!openVideoPipe(left_video_pipe_, left_video_path_)) {
-        setLastError(L"failed to open VST left video ffmpeg pipe: " + left_video_path_.wstring());
+    left_raw_.open(left_raw_path_, std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!left_raw_.is_open()) {
+        setLastError(L"failed to open EyeCamera left raw output: " + left_raw_path_.wstring());
         return false;
     }
-    if (!openVideoPipe(right_video_pipe_, right_video_path_)) {
-        setLastError(L"failed to open VST right video ffmpeg pipe: " + right_video_path_.wstring());
+
+    right_raw_.open(right_raw_path_, std::ios::out | std::ios::binary | std::ios::trunc);
+    if (!right_raw_.is_open()) {
+        setLastError(L"failed to open EyeCamera right raw output: " + right_raw_path_.wstring());
         return false;
     }
 
     left_metadata_csv_.open(left_metadata_path_, std::ios::out | std::ios::trunc);
     if (!left_metadata_csv_.is_open()) {
-        setLastError(L"failed to open VST left metadata CSV: " + left_metadata_path_.wstring());
+        setLastError(L"failed to open EyeCamera left metadata CSV: " + left_metadata_path_.wstring());
         return false;
     }
+
     right_metadata_csv_.open(right_metadata_path_, std::ios::out | std::ios::trunc);
     if (!right_metadata_csv_.is_open()) {
-        setLastError(L"failed to open VST right metadata CSV: " + right_metadata_path_.wstring());
+        setLastError(L"failed to open EyeCamera right metadata CSV: " + right_metadata_path_.wstring());
         return false;
     }
 
@@ -272,11 +275,16 @@ bool VarjoVSTService::openOutputs()
     return true;
 }
 
-void VarjoVSTService::closeOutputs()
+void VarjoEyeCameraService::closeOutputs()
 {
-    closeVideoPipe(left_video_pipe_);
-    closeVideoPipe(right_video_pipe_);
-
+    if (left_raw_.is_open()) {
+        left_raw_.flush();
+        left_raw_.close();
+    }
+    if (right_raw_.is_open()) {
+        right_raw_.flush();
+        right_raw_.close();
+    }
     if (left_metadata_csv_.is_open()) {
         left_metadata_csv_.flush();
         left_metadata_csv_.close();
@@ -287,48 +295,24 @@ void VarjoVSTService::closeOutputs()
     }
 }
 
-bool VarjoVSTService::openVideoPipe(FILE*& pipe, const std::filesystem::path& path)
-{
-    closeVideoPipe(pipe);
-
-    std::wostringstream cmd;
-    cmd << L"ffmpeg -y -loglevel error "
-        << L"-f rawvideo -pix_fmt nv12 "
-        << L"-s " << stream_config_.width << L"x" << stream_config_.height << L" "
-        << L"-r " << stream_config_.frameRate << L" "
-        << L"-i pipe:0 "
-        << L"-c:v libx264 -preset veryfast -crf 18 -g 1 -pix_fmt yuv420p -an "
-        << quoteCommandArgument(path);
-
-    pipe = _wpopen(cmd.str().c_str(), L"wb");
-    return pipe != nullptr;
-}
-
-void VarjoVSTService::closeVideoPipe(FILE*& pipe)
-{
-    if (pipe) {
-        fflush(pipe);
-        _pclose(pipe);
-        pipe = nullptr;
-    }
-}
-
-void VarjoVSTService::onFrameReceivedStatic(
+void VarjoEyeCameraService::onFrameReceivedStatic(
     const varjo_StreamFrame* frame,
     varjo_Session* session,
     void* user_data)
 {
-    auto* self = static_cast<VarjoVSTService*>(user_data);
-    if (!self) return;
+    auto* self = static_cast<VarjoEyeCameraService*>(user_data);
+    if (!self) {
+        return;
+    }
     self->onFrameReceived(frame, session);
 }
 
-void VarjoVSTService::onFrameReceived(const varjo_StreamFrame* frame, varjo_Session* callback_session)
+void VarjoEyeCameraService::onFrameReceived(const varjo_StreamFrame* frame, varjo_Session* callback_session)
 {
     if (!frame || !callback_session || stop_requested_.load()) {
         return;
     }
-    if (frame->type != varjo_StreamType_DistortedColor) {
+    if (frame->type != varjo_StreamType_EyeCamera) {
         return;
     }
 
@@ -340,7 +324,7 @@ void VarjoVSTService::onFrameReceived(const varjo_StreamFrame* frame, varjo_Sess
     }
 }
 
-void VarjoVSTService::captureChannel(
+void VarjoEyeCameraService::captureChannel(
     const varjo_StreamFrame& frame,
     varjo_Session* callback_session,
     varjo_ChannelIndex channel_index)
@@ -360,32 +344,25 @@ void VarjoVSTService::captureChannel(
     captured.stream_frame = frame;
     captured.channel_index = channel_index;
 
-    if ((frame.dataFlags & varjo_DataFlag_Intrinsics) != 0) {
-        captured.intrinsics = varjo_GetCameraIntrinsics2(callback_session, frame.id, frame.frameNumber, channel_index);
-    }
-    if ((frame.dataFlags & varjo_DataFlag_Extrinsics) != 0) {
-        captured.extrinsics = varjo_GetCameraExtrinsics(callback_session, frame.id, frame.frameNumber, channel_index);
-    }
-
     varjo_LockDataStreamBuffer(callback_session, buffer_id);
     captured.buffer_metadata = varjo_GetBufferMetadata(callback_session, buffer_id);
 
     if (captured.buffer_metadata.type == varjo_BufferType_CPU && captured.buffer_metadata.byteSize > 0) {
         const auto* src = static_cast<const uint8_t*>(varjo_GetBufferCPUData(callback_session, buffer_id));
         if (src) {
-            captured.nv12_with_padding.resize(static_cast<size_t>(captured.buffer_metadata.byteSize));
-            std::memcpy(captured.nv12_with_padding.data(), src, captured.nv12_with_padding.size());
+            captured.raw_with_padding.resize(static_cast<size_t>(captured.buffer_metadata.byteSize));
+            std::memcpy(captured.raw_with_padding.data(), src, captured.raw_with_padding.size());
         }
     }
 
     varjo_UnlockDataStreamBuffer(callback_session, buffer_id);
 
-    if (!captured.nv12_with_padding.empty()) {
+    if (!captured.raw_with_padding.empty()) {
         pushCapturedFrame(std::move(captured));
     }
 }
 
-void VarjoVSTService::pushCapturedFrame(CapturedFrame&& frame)
+void VarjoEyeCameraService::pushCapturedFrame(CapturedFrame&& frame)
 {
     {
         std::lock_guard<std::mutex> lock(frame_queue_mutex_);
@@ -399,7 +376,7 @@ void VarjoVSTService::pushCapturedFrame(CapturedFrame&& frame)
     frame_queue_cv_.notify_one();
 }
 
-void VarjoVSTService::writerMain()
+void VarjoEyeCameraService::writerMain()
 {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
 
@@ -429,10 +406,10 @@ void VarjoVSTService::writerMain()
     }
 }
 
-void VarjoVSTService::writeFrame(const CapturedFrame& frame)
+void VarjoEyeCameraService::writeFrame(const CapturedFrame& frame)
 {
     const bool is_left = (frame.channel_index == varjo_ChannelIndex_Left);
-    FILE* pipe = is_left ? left_video_pipe_ : right_video_pipe_;
+    std::ofstream& raw = is_left ? left_raw_ : right_raw_;
     std::ofstream& metadata_csv = is_left ? left_metadata_csv_ : right_metadata_csv_;
 
     uint64_t row_index = 0;
@@ -441,13 +418,15 @@ void VarjoVSTService::writeFrame(const CapturedFrame& frame)
         row_index = is_left ? left_frame_count_ : right_frame_count_;
     }
 
-    if (!writeNv12WithoutPadding(pipe, frame)) {
+    uint64_t byte_offset = 0;
+    uint64_t byte_size = 0;
+    if (!writeRawBuffer(raw, frame, byte_offset, byte_size)) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         ++write_failure_count_;
     }
 
     if (metadata_csv.is_open()) {
-        writeMetadataRow(metadata_csv, frame, row_index);
+        writeMetadataRow(metadata_csv, frame, row_index, byte_offset, byte_size);
     }
 
     {
@@ -460,74 +439,54 @@ void VarjoVSTService::writeFrame(const CapturedFrame& frame)
     }
 }
 
-bool VarjoVSTService::writeNv12WithoutPadding(FILE* pipe, const CapturedFrame& frame)
+bool VarjoEyeCameraService::writeRawBuffer(std::ofstream& ofs, const CapturedFrame& frame, uint64_t& byte_offset, uint64_t& byte_size)
 {
-    if (!pipe || frame.nv12_with_padding.empty()) {
+    byte_offset = 0;
+    byte_size = static_cast<uint64_t>(frame.raw_with_padding.size());
+    if (!ofs.is_open() || frame.raw_with_padding.empty()) {
         return false;
     }
 
-    const int width = frame.buffer_metadata.width;
-    const int height = frame.buffer_metadata.height;
-    const int row_stride = frame.buffer_metadata.rowStride;
-    if (width <= 0 || height <= 0 || row_stride < width) {
-        return false;
+    const auto pos = ofs.tellp();
+    if (pos != std::streampos(-1)) {
+        byte_offset = static_cast<uint64_t>(static_cast<std::streamoff>(pos));
     }
-
-    const uint8_t* src = frame.nv12_with_padding.data();
-    const size_t src_size = frame.nv12_with_padding.size();
-    const size_t y_plane_size = static_cast<size_t>(row_stride) * static_cast<size_t>(height);
-    const size_t uv_plane_size = static_cast<size_t>(row_stride) * static_cast<size_t>(height / 2);
-    if (src_size < y_plane_size + uv_plane_size) {
-        return false;
-    }
-
-    for (int y = 0; y < height; ++y) {
-        const size_t written = fwrite(src + static_cast<size_t>(y) * row_stride, 1, static_cast<size_t>(width), pipe);
-        if (written != static_cast<size_t>(width)) return false;
-    }
-
-    const uint8_t* uv = src + y_plane_size;
-    for (int y = 0; y < height / 2; ++y) {
-        const size_t written = fwrite(uv + static_cast<size_t>(y) * row_stride, 1, static_cast<size_t>(width), pipe);
-        if (written != static_cast<size_t>(width)) return false;
-    }
-
-    return true;
+    ofs.write(reinterpret_cast<const char*>(frame.raw_with_padding.data()), static_cast<std::streamsize>(frame.raw_with_padding.size()));
+    return ofs.good();
 }
 
-void VarjoVSTService::writeMetadataHeader(std::ofstream& ofs)
+void VarjoEyeCameraService::writeMetadataHeader(std::ofstream& ofs)
 {
     ofs
         << "row_index,"
+        << "raw_byte_offset,raw_byte_size,"
         << "system_timestamp_unix_us,"
         << "system_timestamp_utc_iso8601,"
         << "stream_id,stream_type,frame_number,channels,data_flags,channel_index,"
-        << "distorted_color_timestamp,distorted_color_timestamp_unix_us,"
-        << "ev,exposure_time,white_balance_temperature,camera_calibration_constant,"
-        << "wb_gain_r,wb_gain_g,wb_gain_b";
+        << "eye_camera_timestamp,eye_camera_timestamp_unix_us,"
+        << "glint_mask_left,glint_mask_right,"
+        << "buffer_format,buffer_type,buffer_byte_size,buffer_row_stride,buffer_width,buffer_height";
 
-    for (int i = 0; i < 9; ++i) ofs << ",inv_ccm_m" << i;
-    for (int i = 0; i < 9; ++i) ofs << ",ccm_m" << i;
-    for (int i = 0; i < 16; ++i) ofs << ",hmd_pose_m" << i;
-    for (int i = 0; i < 16; ++i) ofs << ",extrinsics_m" << i;
-
-    ofs
-        << ",intrinsics_model,"
-        << "intrinsics_principal_point_x,intrinsics_principal_point_y,"
-        << "intrinsics_focal_length_x,intrinsics_focal_length_y";
-    for (int i = 0; i < 8; ++i) ofs << ",intrinsics_distortion_coeff_" << i;
-
-    ofs
-        << ",buffer_format,buffer_type,buffer_byte_size,buffer_row_stride,buffer_width,buffer_height\n";
+    for (int i = 0; i < 16; ++i) {
+        ofs << ",hmd_pose_m" << i;
+    }
+    ofs << "\n";
 }
 
-void VarjoVSTService::writeMetadataRow(std::ofstream& ofs, const CapturedFrame& frame, uint64_t row_index)
+void VarjoEyeCameraService::writeMetadataRow(
+    std::ofstream& ofs,
+    const CapturedFrame& frame,
+    uint64_t row_index,
+    uint64_t byte_offset,
+    uint64_t byte_size)
 {
     const auto& sf = frame.stream_frame;
-    const auto& dc = sf.metadata.distortedColor;
+    const auto& ec = sf.metadata.eyeCamera;
 
     ofs
         << row_index << ','
+        << byte_offset << ','
+        << byte_size << ','
         << frame.system_unix_us << ','
         << formatSystemClockUtcIso8601(frame.system_time) << ','
         << sf.id << ','
@@ -536,42 +495,22 @@ void VarjoVSTService::writeMetadataRow(std::ofstream& ofs, const CapturedFrame& 
         << sf.channels << ','
         << sf.dataFlags << ','
         << frame.channel_index << ','
-        << dc.timestamp << ','
-        << convertVarjoTimeToUnixUs(dc.timestamp) << ','
-        << dc.ev << ','
-        << dc.exposureTime << ','
-        << dc.whiteBalanceTemperature << ','
-        << dc.cameraCalibrationConstant << ','
-        << dc.wbNormalizationData.whiteBalanceColorGains[0] << ','
-        << dc.wbNormalizationData.whiteBalanceColorGains[1] << ','
-        << dc.wbNormalizationData.whiteBalanceColorGains[2];
+        << ec.timestamp << ','
+        << convertVarjoTimeToUnixUs(ec.timestamp) << ','
+        << ec.glintMaskLeft << ','
+        << ec.glintMaskRight << ','
+        << frame.buffer_metadata.format << ','
+        << frame.buffer_metadata.type << ','
+        << frame.buffer_metadata.byteSize << ','
+        << frame.buffer_metadata.rowStride << ','
+        << frame.buffer_metadata.width << ','
+        << frame.buffer_metadata.height << ',';
 
-    for (int i = 0; i < 9; ++i) ofs << ',' << dc.wbNormalizationData.invCCM.value[i];
-    for (int i = 0; i < 9; ++i) ofs << ',' << dc.wbNormalizationData.ccm.value[i];
-    ofs << ',';
     writeMatrixCsv(ofs, sf.hmdPose);
-    ofs << ',';
-    writeMatrixCsv(ofs, frame.extrinsics);
-
-    ofs
-        << ',' << frame.intrinsics.model
-        << ',' << frame.intrinsics.principalPointX
-        << ',' << frame.intrinsics.principalPointY
-        << ',' << frame.intrinsics.focalLengthX
-        << ',' << frame.intrinsics.focalLengthY;
-    for (int i = 0; i < 8; ++i) ofs << ',' << frame.intrinsics.distortionCoefficients[i];
-
-    ofs
-        << ',' << frame.buffer_metadata.format
-        << ',' << frame.buffer_metadata.type
-        << ',' << frame.buffer_metadata.byteSize
-        << ',' << frame.buffer_metadata.rowStride
-        << ',' << frame.buffer_metadata.width
-        << ',' << frame.buffer_metadata.height
-        << '\n';
+    ofs << '\n';
 }
 
-int64_t VarjoVSTService::convertVarjoTimeToUnixUs(varjo_Nanoseconds timestamp) const
+int64_t VarjoEyeCameraService::convertVarjoTimeToUnixUs(varjo_Nanoseconds timestamp) const
 {
     if (!session_ || timestamp <= 0) {
         return 0;
@@ -580,7 +519,7 @@ int64_t VarjoVSTService::convertVarjoTimeToUnixUs(varjo_Nanoseconds timestamp) c
     return static_cast<int64_t>(unix_ns / 1000);
 }
 
-void VarjoVSTService::setLastError(const std::wstring& message)
+void VarjoEyeCameraService::setLastError(const std::wstring& message)
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
     last_error_ = message;
