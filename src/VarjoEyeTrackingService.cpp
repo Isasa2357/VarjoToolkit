@@ -1,4 +1,4 @@
-﻿﻿#ifndef NOMINMAX
+#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 
@@ -12,6 +12,7 @@
 #include <chrono>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace {
 	struct Vec4 {
@@ -560,20 +561,20 @@ std::vector<VarjoEyeTrackingData> VarjoEyeTrackingProvider::getEyeTrackingData()
 
 	std::vector<VarjoEyeTrackingData> datas(gaze_and_measurements.size());
 	for (auto i = 0; i < gaze_and_measurements.size(); ++i) {
-		datas[i] = VarjoEyeTrackingData{
-			.gaze = gaze_and_measurements[i].first,
-			.measurements = gaze_and_measurements[i].second,
-			.userIPD = userIPD,
-			.hmdIPD = hmdIPD,
-			.ipdAdjustmentMode = ipdAdjustmentMode,
-			.renderingGaze = renderingGaze,
-			.gazePos_toVideo = gazePos_toVideo[i], 
-			.renderingGazePos_toVideo = renderingGazePos_toVideo,
-			.gazePos_toVarjoDisplay = gazePos_toVarjoDisplay_and_frameInfo[i].first,
-			.renderingGazePos_toVarjoDisplay = renderingGazePos_toVarjoDisplay,
-			.frameInfo = gazePos_toVarjoDisplay_and_frameInfo[i].second,
-			.renderingGazeFrameInfo = copy_frameInfo_forRenderingGaze
-		};
+		VarjoEyeTrackingData data{};
+		data.gaze = gaze_and_measurements[i].first;
+		data.measurements = gaze_and_measurements[i].second;
+		data.userIPD = userIPD;
+		data.hmdIPD = hmdIPD;
+		data.ipdAdjustmentMode = ipdAdjustmentMode;
+		data.renderingGaze = renderingGaze;
+		data.gazePos_toVideo = gazePos_toVideo[i];
+		data.renderingGazePos_toVideo = renderingGazePos_toVideo;
+		data.gazePos_toVarjoDisplay = gazePos_toVarjoDisplay_and_frameInfo[i].first;
+		data.renderingGazePos_toVarjoDisplay = renderingGazePos_toVarjoDisplay;
+		data.frameInfo = gazePos_toVarjoDisplay_and_frameInfo[i].second;
+		data.renderingGazeFrameInfo = copy_frameInfo_forRenderingGaze;
+		datas[i] = std::move(data);
 	}
 
 	return datas;
@@ -661,10 +662,9 @@ varjo_Vector2Df VarjoEyeTrackingProvider::calcProjectedGazePositionToVarjoDispla
 		return { 0.0f, 0.0f };
 	}
 
-	varjo_Vector2Df out{
-		.x = static_cast<float>(pClip.x / pClip.w),
-		.y = static_cast<float>(pClip.y / pClip.w)
-	};
+	varjo_Vector2Df out{};
+	out.x = static_cast<float>(pClip.x / pClip.w);
+	out.y = static_cast<float>(pClip.y / pClip.w);
 
 	if (std::isfinite(out.x) && std::isfinite(out.y)) {
 		return out;
