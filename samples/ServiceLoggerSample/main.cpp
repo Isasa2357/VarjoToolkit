@@ -1,4 +1,4 @@
-#ifndef NOMINMAX
+﻿#ifndef NOMINMAX
 #define NOMINMAX
 #endif
 #ifndef WIN32_LEAN_AND_MEAN
@@ -7,6 +7,7 @@
 
 #include <VarjoServices/EyeTracking/VarjoEyeTrackingService.hpp>
 #include <VarjoServices/IMU/VarjoIMUService.hpp>
+#include <VarjoServices/Utilities/VarjoTimestampMapping.hpp>
 #include <VarjoServices/VST/VarjoVSTService.hpp>
 
 #include <Varjo.h>
@@ -18,6 +19,7 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -46,6 +48,7 @@ struct Options {
     bool enableEyeTracking = true;
     bool enableIMU = true;
     bool enableVST = true;
+    bool enableTimestampMapping = true;
     bool help = false;
 };
 
@@ -63,6 +66,7 @@ void printUsage()
         << "  --no-eye            Disable VarjoEyeTrackingService\n"
         << "  --no-imu            Disable VarjoIMUService\n"
         << "  --no-vst            Disable VarjoVSTService\n"
+        << "  --no-timestamp      Disable timestamp mapping utility CSV output\n"
         << "  --help              Show this message\n"
         << "\n"
         << "Notes:\n"
@@ -125,6 +129,10 @@ bool parseArguments(int argc, char** argv, Options& options)
             options.enableVST = false;
             continue;
         }
+        if (arg == "--no-timestamp") {
+            options.enableTimestampMapping = false;
+            continue;
+        }
 
         std::cerr << "Unknown option: " << arg << "\n";
         return false;
@@ -141,6 +149,39 @@ int64_t elapsedSeconds(std::chrono::steady_clock::time_point start)
 void printPath(const char* label, const std::filesystem::path& path)
 {
     std::wcout << L"  " << label << L": " << path.wstring() << L"\n";
+}
+
+void writeTimestampMappingHeader(std::ofstream& ofs)
+{
+    ofs
+        << "row_index,"
+        << "varjo_timestamp,"
+        << "varjo_timestamp_unix_ns,"
+        << "varjo_timestamp_unix_us,"
+        << "system_timestamp_unix_us,"
+        << "system_timestamp_utc_iso8601,"
+        << "system_timestamp_local_iso8601,"
+        << "delta_varjo_unix_minus_system_us\n";
+}
+
+void writeTimestampMappingRow(
+    std::ofstream& ofs,
+    const VarjoTimestampMapping::Sample& sample,
+    uint64_t rowIndex)
+{
+    if (!ofs.is_open() || !sample.valid) {
+        return;
+    }
+
+    ofs
+        << rowIndex << ","
+        << sample.varjoTimestamp << ","
+        << sample.varjoTimestampUnixNs << ","
+        << sample.varjoTimestampUnixUs << ","
+        << sample.systemTimestampUnixUs << ","
+        << VarjoTimestampMapping::formatUtcIso8601(sample.systemTimestamp) << ","
+        << VarjoTimestampMapping::formatLocalIso8601(sample.systemTimestamp) << ","
+        << sample.deltaVarjoUnixMinusSystemUs << "\n";
 }
 
 } // namespace
@@ -187,10 +228,24 @@ int main(int argc, char** argv)
 
     const auto eyeCsv = options.outputDirectory / "eye_tracking.csv";
     const auto imuCsv = options.outputDirectory / "imu.csv";
+    const auto timestampMappingCsv = options.outputDirectory / "timestamp_mapping.csv";
 
     std::unique_ptr<VarjoEyeTrackingService> eyeTrackingService;
     std::unique_ptr<VarjoIMUService> imuService;
     std::unique_ptr<VarjoVSTService> vstService;
+    VarjoTimestampMapping timestampMapping(session);
+    std::ofstream timestampMappingLog;
+    uint64_t timestampMappingRows = 0;
+
+    if (options.enableTimestampMapping) {
+        timestampMappingLog.open(timestampMappingCsv, std::ios::out | std::ios::trunc);
+        if (timestampMappingLog.is_open()) {
+            writeTimestampMappingHeader(timestampMappingLog);
+        } else {
+            std::wcerr << L"Failed to open timestamp mapping CSV: " << timestampMappingCsv.wstring() << L"\n";
+            options.enableTimestampMapping = false;
+        }
+    }
 
     bool eyeTrackingStarted = false;
     bool imuStarted = false;
@@ -226,8 +281,8 @@ int main(int argc, char** argv)
         }
     }
 
-    if (!eyeTrackingStarted && !imuStarted && !vstStarted) {
-        std::cerr << "No service could be started.\n";
+    if (!eyeTrackingStarted && !imuStarted && !vstStarted && !options.enableTimestampMapping) {
+        std::cerr << "No service or utility output could be started.\n";
         return 2;
     }
 
@@ -237,6 +292,9 @@ int main(int argc, char** argv)
     }
     if (imuStarted) {
         printPath("IMU CSV", imuCsv);
+    }
+    if (options.enableTimestampMapping) {
+        printPath("timestamp mapping CSV", timestampMappingCsv);
     }
 
     const auto loopStart = std::chrono::steady_clock::now();
@@ -257,6 +315,14 @@ int main(int argc, char** argv)
         if (sec != lastPrintedSecond) {
             lastPrintedSecond = sec;
             std::cout << "elapsed=" << sec << "s";
+            if (options.enableTimestampMapping) {
+                const auto timestampSample = timestampMapping.sampleCurrentMapping();
+                if (timestampSample.valid) {
+                    writeTimestampMappingRow(timestampMappingLog, timestampSample, timestampMappingRows++);
+                    std::cout << " timestampRows=" << timestampMappingRows
+                              << " timestampDeltaUs=" << timestampSample.deltaVarjoUnixMinusSystemUs;
+                }
+            }
             if (eyeTrackingStarted) {
                 std::cout << " eyeSamplesRead=" << totalEyeSamplesRead;
             }
@@ -276,6 +342,11 @@ int main(int argc, char** argv)
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+
+    if (timestampMappingLog.is_open()) {
+        timestampMappingLog.flush();
+        timestampMappingLog.close();
     }
 
     std::cout << "Stopping services...\n";

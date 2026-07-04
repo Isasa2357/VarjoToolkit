@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.20)
+﻿cmake_minimum_required(VERSION 3.20)
 
 project(VarjoServices LANGUAGES CXX)
 
@@ -73,11 +73,16 @@ add_library(VarjoServices STATIC
     src/VarjoEyeTrackingService.cpp
     src/VarjoIMUService.cpp
     src/VarjoVSTService.cpp
+    src/VarjoTimestampMapping.cpp
 )
 
 target_include_directories(VarjoServices
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/VarjoServices/EyeTracking"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/VarjoServices/IMU"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/VarjoServices/VST"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include/VarjoServices/Utilities"
         "${VARJO_INCLUDE_DIR}"
         "${BOOST_INCLUDE_DIR}"
 )

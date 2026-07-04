@@ -1,8 +1,8 @@
-# ServiceLoggerSample
+﻿# ServiceLoggerSample
 
 `VarjoServices` の各 Service を同時に起動し、CSV / 動画ログを出力する最小サンプルです。
 
-この版では `VarjoTimeMappingService` / `TimeMapping` は使いません。
+`VarjoTimeMappingService` のような TimeMapping Service は使いません。代わりに、`Utilities/VarjoTimestampMapping` を使って timestamp mapping CSV をサンプル側で出力します。
 
 ## 実行内容
 
@@ -12,6 +12,9 @@
 - `VarjoIMUService`
   - `imu.csv` を出力します。
   - `latestData()` と `rowCount()` の使い方も示します。
+- `VarjoTimestampMapping`
+  - `timestamp_mapping.csv` を出力します。
+  - Service ではなく、Utilities 配下の軽量な timestamp 変換クラスです。
 - `VarjoVSTService`
   - `sample_vst_left.mp4`
   - `sample_vst_right.mp4`
@@ -52,6 +55,7 @@ out\build\default\samples\ServiceLoggerSample\Release\VarjoServiceLoggerSample.e
 --no-eye         VarjoEyeTrackingService を無効化
 --no-imu         VarjoIMUService を無効化
 --no-vst         VarjoVSTService を無効化
+--no-timestamp   VarjoTimestampMapping による timestamp_mapping.csv 出力を無効化
 --help           ヘルプ表示
 ```
 
@@ -61,6 +65,7 @@ out\build\default\samples\ServiceLoggerSample\Release\VarjoServiceLoggerSample.e
 logs/
   eye_tracking.csv
   imu.csv
+  timestamp_mapping.csv
   sample_vst_left.mp4
   sample_vst_right.mp4
   sample_vst_left_metadata.csv
@@ -71,4 +76,5 @@ logs/
 
 - EyeTracking を使うには、Varjo Base 側で視線取得が許可され、キャリブレーション済みである必要があります。
 - VST 動画保存は内部で `ffmpeg` に raw NV12 を渡して MP4 化します。
+- `VarjoTimestampMapping` は自前のスレッドやログ所有を持ちません。このサンプルでは、進捗表示の1秒周期で `sampleCurrentMapping()` を呼び、CSVへ書き込んでいます。
 - `VarjoEyeTrackingService` のログパスは現在 `std::string` で受けるため、サンプルの `--out` には ASCII のパスを推奨します。
