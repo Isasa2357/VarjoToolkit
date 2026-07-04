@@ -72,7 +72,6 @@ endif()
 add_library(VarjoServices STATIC
     src/VarjoEyeTrackingService.cpp
     src/VarjoIMUService.cpp
-    src/VarjoTimeMappingService.cpp
     src/VarjoVSTService.cpp
 )
 

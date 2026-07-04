@@ -7,7 +7,6 @@
 
 #include <VarjoServices/EyeTracking/VarjoEyeTrackingService.hpp>
 #include <VarjoServices/IMU/VarjoIMUService.hpp>
-#include <VarjoServices/TimeMapping/VarjoTimeMappingService.hpp>
 #include <VarjoServices/VST/VarjoVSTService.hpp>
 
 #include <Varjo.h>
@@ -46,7 +45,6 @@ struct Options {
     int seconds = 30;
     bool enableEyeTracking = true;
     bool enableIMU = true;
-    bool enableTimeMapping = true;
     bool enableVST = true;
     bool help = false;
 };
@@ -64,7 +62,6 @@ void printUsage()
         << "  --seconds <n>        Logging duration in seconds. 0 means run until Ctrl+C. Default: 30\n"
         << "  --no-eye            Disable VarjoEyeTrackingService\n"
         << "  --no-imu            Disable VarjoIMUService\n"
-        << "  --no-time           Disable VarjoTimeMappingService\n"
         << "  --no-vst            Disable VarjoVSTService\n"
         << "  --help              Show this message\n"
         << "\n"
@@ -122,10 +119,6 @@ bool parseArguments(int argc, char** argv, Options& options)
         }
         if (arg == "--no-imu") {
             options.enableIMU = false;
-            continue;
-        }
-        if (arg == "--no-time") {
-            options.enableTimeMapping = false;
             continue;
         }
         if (arg == "--no-vst") {
@@ -194,25 +187,14 @@ int main(int argc, char** argv)
 
     const auto eyeCsv = options.outputDirectory / "eye_tracking.csv";
     const auto imuCsv = options.outputDirectory / "imu.csv";
-    const auto timeMappingCsv = options.outputDirectory / "time_mapping.csv";
 
-    std::unique_ptr<VarjoTimeMappingService> timeMappingService;
     std::unique_ptr<VarjoEyeTrackingService> eyeTrackingService;
     std::unique_ptr<VarjoIMUService> imuService;
     std::unique_ptr<VarjoVSTService> vstService;
 
-    bool timeMappingStarted = false;
     bool eyeTrackingStarted = false;
     bool imuStarted = false;
     bool vstStarted = false;
-
-    if (options.enableTimeMapping) {
-        timeMappingService = std::make_unique<VarjoTimeMappingService>(session, 5);
-        timeMappingStarted = timeMappingService->start(timeMappingCsv.wstring());
-        if (!timeMappingStarted) {
-            std::wcerr << L"VarjoTimeMappingService failed to start: " << timeMappingCsv.wstring() << L"\n";
-        }
-    }
 
     if (options.enableEyeTracking) {
         eyeTrackingService = std::make_unique<VarjoEyeTrackingService>(
@@ -244,15 +226,18 @@ int main(int argc, char** argv)
         }
     }
 
-    if (!timeMappingStarted && !eyeTrackingStarted && !imuStarted && !vstStarted) {
+    if (!eyeTrackingStarted && !imuStarted && !vstStarted) {
         std::cerr << "No service could be started.\n";
         return 2;
     }
 
     std::cout << "Logging started. Press Ctrl+C to stop.\n";
-    printPath("eye tracking CSV", eyeCsv);
-    printPath("IMU CSV", imuCsv);
-    printPath("time mapping CSV", timeMappingCsv);
+    if (eyeTrackingStarted) {
+        printPath("eye tracking CSV", eyeCsv);
+    }
+    if (imuStarted) {
+        printPath("IMU CSV", imuCsv);
+    }
 
     const auto loopStart = std::chrono::steady_clock::now();
     int64_t lastPrintedSecond = -1;
@@ -272,9 +257,6 @@ int main(int argc, char** argv)
         if (sec != lastPrintedSecond) {
             lastPrintedSecond = sec;
             std::cout << "elapsed=" << sec << "s";
-            if (timeMappingStarted && timeMappingService) {
-                std::cout << " timeRows=" << timeMappingService->rowCount();
-            }
             if (eyeTrackingStarted) {
                 std::cout << " eyeSamplesRead=" << totalEyeSamplesRead;
             }
@@ -305,9 +287,6 @@ int main(int argc, char** argv)
     }
     if (eyeTrackingService) {
         eyeTrackingService->stop();
-    }
-    if (timeMappingService) {
-        timeMappingService->stop();
     }
 
     std::cout << "Done.\n";

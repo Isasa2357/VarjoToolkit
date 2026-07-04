@@ -2,10 +2,10 @@
 
 `VarjoServices` の各 Service を同時に起動し、CSV / 動画ログを出力する最小サンプルです。
 
+この版では `VarjoTimeMappingService` / `TimeMapping` は使いません。
+
 ## 実行内容
 
-- `VarjoTimeMappingService`
-  - `time_mapping.csv` を出力します。
 - `VarjoEyeTrackingService`
   - `eye_tracking.csv` を出力します。
   - `requestData()` の使い方も示します。
@@ -51,9 +51,20 @@ out\build\default\samples\ServiceLoggerSample\Release\VarjoServiceLoggerSample.e
 --seconds <n>    ログ時間。0 を指定すると Ctrl+C まで継続
 --no-eye         VarjoEyeTrackingService を無効化
 --no-imu         VarjoIMUService を無効化
---no-time        VarjoTimeMappingService を無効化
 --no-vst         VarjoVSTService を無効化
 --help           ヘルプ表示
+```
+
+## 出力例
+
+```text
+logs/
+  eye_tracking.csv
+  imu.csv
+  sample_vst_left.mp4
+  sample_vst_right.mp4
+  sample_vst_left_metadata.csv
+  sample_vst_right_metadata.csv
 ```
 
 ## 注意
