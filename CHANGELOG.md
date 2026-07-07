@@ -4,6 +4,20 @@
 
 ### Added
 
+- `VarjoVideoPostProcessShader`
+  - Thin wrapper for Varjo Native SDK experimental Video Post Process Shader API.
+  - Accepts compiled shader bytecode as `const void* + size`; it does not compile HLSL source.
+  - Accepts constant buffer updates as raw bytes and provides trivially-copyable struct template helpers.
+  - Holds `varjo_LockType_VideoPostProcessShader` through RAII.
+  - Supports D3D11 and D3D12 configure entry points with native DirectX objects supplied by the caller.
+  - Provides supported texture format query helpers.
+- `VarjoShaderTextureLock`
+  - RAII wrapper for `varjo_MRAcquireShaderTexture` / `varjo_MRReleaseShaderTexture`.
+- `VarjoToolkitVideoPostProcessShaderTest`
+  - HMD-independent tests for bytecode views, config helpers, texture config helpers, null-session failure paths, and template constant buffer helpers.
+- `VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS` CMake option.
+  - Enabled by default.
+  - Requires `include_experimental` from Varjo experimental SDK.
 - `VarjoEventService`
   - Polls `VarjoEventQueue` in a worker thread.
   - Writes event rows to CSV with row index, readable event type name, and `varjo_Event` payload fields.
@@ -19,6 +33,7 @@
 
 ### Changed
 
+- Documented the Varjo Native SDK video post process shader wrapper policy in `docs/ARCHITECTURE.md`.
 - Removed the core Boost dependency by replacing the eye tracking frame history `boost::circular_buffer` usage with `std::deque`-based bounded history logic.
 - Removed Boost discovery / FetchContent fallback from CMake.
 - Documented the VarjoToolkit dependency and architecture policy in `docs/ARCHITECTURE.md`.
