@@ -4,6 +4,11 @@
 
 ### Added
 
+- `VarjoVideoPostProcessD3D11Sample`.
+  - Demonstrates `VarjoVideoPostProcessShader` with D3D11.
+  - Compiles an embedded HLSL compute shader in the sample and passes the compiled blob to the wrapper.
+  - Submits a trivially-copyable constant buffer struct without the wrapper interpreting its fields.
+  - Applies a simple circular VST dimming/highlight effect and updates parameters at runtime.
 - CMake install / package support.
   - Installs the `VarjoToolkit` static library and public headers.
   - Exports `VarjoToolkit::VarjoToolkit` through `VarjoToolkitTargets.cmake`.
