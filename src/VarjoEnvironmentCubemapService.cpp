@@ -9,40 +9,15 @@
 
 #include <VarjoToolkit/DataStream/VarjoDataStreamBufferLock.hpp>
 #include <VarjoToolkit/Utilities/VarjoCsv.hpp>
+#include <VarjoToolkit/Utilities/VarjoTimestampMapping.hpp>
 
 #include <Windows.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cstring>
-#include <ctime>
 #include <iomanip>
 #include <sstream>
-
-namespace {
-
-int64_t systemTimeUnixUsFromTimePoint(std::chrono::system_clock::time_point tp)
-{
-    return std::chrono::duration_cast<std::chrono::microseconds>(tp.time_since_epoch()).count();
-}
-
-std::string formatSystemClockUtcIso8601(std::chrono::system_clock::time_point tp)
-{
-    const auto usSinceEpoch = std::chrono::duration_cast<std::chrono::microseconds>(tp.time_since_epoch());
-    const auto secSinceEpoch = std::chrono::duration_cast<std::chrono::seconds>(usSinceEpoch);
-    const int micros = static_cast<int>((usSinceEpoch - secSinceEpoch).count());
-
-    const std::time_t tt = std::chrono::system_clock::to_time_t(tp);
-    std::tm tm{};
-    gmtime_s(&tm, &tt);
-
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S")
-        << "." << std::setw(6) << std::setfill('0') << micros << "Z";
-    return oss.str();
-}
-
-} // namespace
 
 VarjoEnvironmentCubemapService::VarjoEnvironmentCubemapService(
     const std::shared_ptr<varjo_Session>& session,
@@ -255,7 +230,7 @@ void VarjoEnvironmentCubemapService::captureFrame(
 
     CapturedFrame captured{};
     captured.system_time = std::chrono::system_clock::now();
-    captured.system_unix_us = systemTimeUnixUsFromTimePoint(captured.system_time);
+    captured.system_unix_us = VarjoTimestampMapping::systemTimeToUnixUs(captured.system_time);
     captured.stream_frame = frame;
     captured.channel_index = channel_index;
 
@@ -403,7 +378,7 @@ void VarjoEnvironmentCubemapService::writeMetadataRow(
         << byte_offset << ','
         << byte_size << ','
         << frame.system_unix_us << ','
-        << formatSystemClockUtcIso8601(frame.system_time) << ','
+        << VarjoTimestampMapping::formatUtcIso8601(frame.system_time) << ','
         << sf.id << ','
         << sf.type << ','
         << sf.frameNumber << ','
@@ -427,11 +402,10 @@ void VarjoEnvironmentCubemapService::writeMetadataRow(
 
 int64_t VarjoEnvironmentCubemapService::convertVarjoTimeToUnixUs(varjo_Nanoseconds timestamp) const
 {
-    if (!session_ || timestamp <= 0) {
-        return 0;
-    }
-    const varjo_Nanoseconds unix_ns = varjo_ConvertToUnixTime(session_.get(), timestamp);
-    return static_cast<int64_t>(unix_ns / 1000);
+    VarjoTimestampMapping mapping(session_);
+    int64_t unix_us = 0;
+    mapping.convertVarjoTimestampToUnixUs(timestamp, unix_us);
+    return unix_us;
 }
 
 void VarjoEnvironmentCubemapService::setLastError(const std::wstring& message)
