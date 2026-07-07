@@ -12,18 +12,11 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
-#include <ctime>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
 
 namespace {
-
-int64_t systemTimeUnixUsFromTimePoint(std::chrono::system_clock::time_point tp)
-{
-    return std::chrono::duration_cast<std::chrono::microseconds>(
-        tp.time_since_epoch()).count();
-}
 
 std::wstring quoteCommandArgument(const std::filesystem::path& path)
 {
@@ -39,22 +32,6 @@ std::wstring quoteCommandArgument(const std::filesystem::path& path)
     }
     out.push_back(L'"');
     return out;
-}
-
-std::string formatSystemClockUtcIso8601(std::chrono::system_clock::time_point tp)
-{
-    const auto us_since_epoch = std::chrono::duration_cast<std::chrono::microseconds>(tp.time_since_epoch());
-    const auto sec_since_epoch = std::chrono::duration_cast<std::chrono::seconds>(us_since_epoch);
-    const int micros = static_cast<int>((us_since_epoch - sec_since_epoch).count());
-
-    const std::time_t tt = std::chrono::system_clock::to_time_t(tp);
-    std::tm tm{};
-    gmtime_s(&tm, &tt);
-
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S")
-        << "." << std::setw(6) << std::setfill('0') << micros << "Z";
-    return oss.str();
 }
 
 varjo_ChannelFlag cameraBothEyeChannels()
@@ -73,6 +50,7 @@ VarjoVSTService::VarjoVSTService(
     size_t queue_capacity)
     : session_(session)
     , data_stream_(session)
+    , timestamp_mapping_(session)
     , output_directory_(output_directory)
     , base_filename_(base_filename)
     , queue_capacity_((queue_capacity > 0) ? queue_capacity : 1)
@@ -330,7 +308,7 @@ void VarjoVSTService::captureChannel(
 
     CapturedFrame captured{};
     captured.system_time = std::chrono::system_clock::now();
-    captured.system_unix_us = systemTimeUnixUsFromTimePoint(captured.system_time);
+    captured.system_unix_us = VarjoTimestampMapping::systemTimeToUnixUs(captured.system_time);
     captured.stream_frame = frame;
     captured.channel_index = channel_index;
 
@@ -504,7 +482,7 @@ void VarjoVSTService::writeMetadataRow(std::ofstream& ofs, const CapturedFrame& 
     ofs
         << row_index << ','
         << frame.system_unix_us << ','
-        << formatSystemClockUtcIso8601(frame.system_time) << ','
+        << VarjoTimestampMapping::formatUtcIso8601(frame.system_time) << ','
         << sf.id << ','
         << sf.type << ','
         << sf.frameNumber << ','
@@ -531,11 +509,9 @@ void VarjoVSTService::writeMetadataRow(std::ofstream& ofs, const CapturedFrame& 
 
 int64_t VarjoVSTService::convertVarjoTimeToUnixUs(varjo_Nanoseconds timestamp) const
 {
-    if (!session_ || timestamp <= 0) {
-        return 0;
-    }
-    const varjo_Nanoseconds unix_ns = varjo_ConvertToUnixTime(session_.get(), timestamp);
-    return static_cast<int64_t>(unix_ns / 1000);
+    int64_t unix_us = 0;
+    timestamp_mapping_.convertVarjoTimestampToUnixUs(timestamp, unix_us);
+    return unix_us;
 }
 
 void VarjoVSTService::setLastError(const std::wstring& message)
