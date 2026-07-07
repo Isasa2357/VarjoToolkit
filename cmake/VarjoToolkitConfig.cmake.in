@@ -1,0 +1,8 @@
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/VarjoToolkitTargets.cmake")
+
+set(VarjoToolkit_VERSION "@PROJECT_VERSION@")
+set(VarjoToolkit_ENABLE_EXPERIMENTAL_MR_POSTPROCESS "@VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS@")
+
+check_required_components(VarjoToolkit)
