@@ -86,6 +86,8 @@ add_library(VarjoToolkit STATIC
     src/VarjoOcclusionMesh.cpp
     src/VarjoSwapChain.cpp
     src/VarjoLayerFrame.cpp
+    src/VarjoEventService.cpp
+    src/VarjoMarkerTrackingService.cpp
     src/VarjoEyeTrackingService.cpp
     src/VarjoIMUService.cpp
     src/VarjoVSTService.cpp
@@ -179,6 +181,11 @@ if (VARJOTOOLKIT_BUILD_TESTS)
         tests/RenderingWorldDetailedTest.cpp
     )
     list(APPEND _varjotoolkit_test_targets VarjoToolkitRenderingWorldDetailedTest)
+
+    add_executable(VarjoToolkitEventMarkerServicesTest
+        tests/EventMarkerServicesTest.cpp
+    )
+    list(APPEND _varjotoolkit_test_targets VarjoToolkitEventMarkerServicesTest)
 
     foreach(_varjotoolkit_test_target IN LISTS _varjotoolkit_test_targets)
         target_link_libraries(${_varjotoolkit_test_target}
