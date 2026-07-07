@@ -64,7 +64,7 @@ int main()
     VarjoShaderConstantBufferView constantView{&constants, static_cast<int32_t>(sizeof(constants))};
     if (!expect(!constantView.empty(), "non-empty constant buffer view should not be empty")) return 1;
 
-    VarjoShaderTextureLock nullTextureLock(nullptr, varjo_ShaderType_VideoPostProcess, 0);
+    VarjoShaderTextureLock nullTextureLock(static_cast<varjo_Session*>(nullptr), varjo_ShaderType_VideoPostProcess, 0);
     if (nullTextureLock.valid()) return fail("null texture lock should be invalid");
     if (nullTextureLock.lastError().empty()) return fail("null texture lock should report error");
 
