@@ -29,3 +29,10 @@ add_subdirectory(
     "${CMAKE_CURRENT_LIST_DIR}/../D3D12RenderSample"
     "${CMAKE_BINARY_DIR}/samples/D3D12RenderSample"
 )
+
+if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS)
+    add_subdirectory(
+        "${CMAKE_CURRENT_LIST_DIR}/../VideoPostProcessD3D11Sample"
+        "${CMAKE_BINARY_DIR}/samples/VideoPostProcessD3D11Sample"
+    )
+endif()
