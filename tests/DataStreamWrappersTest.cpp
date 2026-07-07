@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -52,7 +53,7 @@ int main()
     }
 
     VarjoDataStream::ConfigRequest wrong_format = exact;
-    wrong_format.format = varjo_TextureFormat_RGBA8;
+    wrong_format.format = varjo_TextureFormat_Y8_UNORM;
     if (VarjoDataStream::configMatches(cfg, wrong_format)) {
         return fail("wrong format request should not match");
     }
