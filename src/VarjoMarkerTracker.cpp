@@ -1,5 +1,7 @@
 #include <VarjoToolkit/World/VarjoMarkerTracker.hpp>
 
+#include <utility>
+
 VarjoMarkerTracker::VarjoMarkerTracker(varjo_Session* session)
     : world_(session, varjo_WorldFlag_UseObjectMarkers)
 {}
