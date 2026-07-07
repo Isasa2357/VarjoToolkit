@@ -39,7 +39,7 @@ int main()
         return 1;
     }
 
-    VarjoWorld nullWorld(nullptr);
+    VarjoWorld nullWorld(static_cast<varjo_Session*>(nullptr));
     if (nullWorld.valid()) {
         return fail("VarjoWorld constructed from nullptr should be invalid");
     }
@@ -52,7 +52,7 @@ int main()
         return 1;
     }
 
-    VarjoMarkerTracker nullMarkerTracker(nullptr);
+    VarjoMarkerTracker nullMarkerTracker(static_cast<varjo_Session*>(nullptr));
     if (nullMarkerTracker.valid()) {
         return fail("VarjoMarkerTracker constructed from nullptr should be invalid");
     }
@@ -60,7 +60,7 @@ int main()
         return fail("null marker tracker should return no markers");
     }
 
-    VarjoOcclusionMesh nullMesh(nullptr, 0);
+    VarjoOcclusionMesh nullMesh(static_cast<varjo_Session*>(nullptr), 0);
     if (nullMesh.valid()) {
         return fail("VarjoOcclusionMesh constructed from nullptr should be invalid");
     }
@@ -72,7 +72,7 @@ int main()
     if (config.textureFormat != varjo_TextureFormat_R8G8B8A8_UNORM || config.textureWidth != 640 || config.textureHeight != 480 || config.numberOfTextures != 3) {
         return fail("VarjoSwapChain::makeConfig should store requested values");
     }
-    VarjoSwapChain nullSwapChain = VarjoSwapChain::createD3D11(nullptr, nullptr, config);
+    VarjoSwapChain nullSwapChain = VarjoSwapChain::createD3D11(static_cast<varjo_Session*>(nullptr), nullptr, config);
     if (nullSwapChain.valid()) {
         return fail("null D3D11 swap chain creation should be invalid");
     }
@@ -98,7 +98,7 @@ int main()
     if (submitInfo.frameNumber != 123 || submitInfo.layerCount != 1 || submitInfo.layers == nullptr) {
         return fail("VarjoLayerFrame::makeSubmitInfo should describe layers");
     }
-    VarjoLayerFrame nullFrame(nullptr);
+    VarjoLayerFrame nullFrame(static_cast<varjo_Session*>(nullptr));
     if (nullFrame.begin()) {
         return fail("VarjoLayerFrame::begin should fail for null session");
     }
