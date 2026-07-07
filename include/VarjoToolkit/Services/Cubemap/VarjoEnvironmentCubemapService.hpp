@@ -4,10 +4,8 @@
 #include <Varjo_datastream.h>
 
 #include <atomic>
-#include <condition_variable>
 #include <chrono>
 #include <cstdint>
-#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -17,6 +15,7 @@
 #include <vector>
 
 #include <VarjoToolkit/DataStream/VarjoDataStream.hpp>
+#include <VarjoToolkit/DataStream/VarjoDataStreamFrameQueue.hpp>
 
 class VarjoEnvironmentCubemapService {
 public:
@@ -84,7 +83,6 @@ private:
     VarjoDataStream data_stream_;
     std::filesystem::path output_directory_;
     std::wstring base_filename_;
-    size_t queue_capacity_ = 90;
 
     varjo_StreamConfig stream_config_{};
     varjo_ChannelFlag channel_flags_ = varjo_ChannelFlag_None;
@@ -95,9 +93,7 @@ private:
     std::ofstream raw_;
     std::ofstream metadata_csv_;
 
-    std::deque<CapturedFrame> frame_queue_;
-    mutable std::mutex frame_queue_mutex_;
-    std::condition_variable frame_queue_cv_;
+    VarjoDataStreamFrameQueue<CapturedFrame> frame_queue_;
 
     std::thread writer_thread_;
     std::atomic_bool stop_requested_{ true };
