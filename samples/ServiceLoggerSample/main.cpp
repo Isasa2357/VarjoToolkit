@@ -5,6 +5,8 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
+#include "WrapperExamples.hpp"
+
 #include <VarjoToolkit/Services/EyeTracking/VarjoEyeTrackingService.hpp>
 #include <VarjoToolkit/Services/IMU/VarjoIMUService.hpp>
 #include <VarjoToolkit/Services/VST/VarjoVSTService.hpp>
@@ -241,6 +243,8 @@ int main(int argc, char** argv)
         std::cerr << "varjo_SessionInit failed.\n";
         return 1;
     }
+
+    printWrapperUsageExamples(session);
 
     const auto eyeCsv = options.outputDirectory / "eye_tracking.csv";
     const auto imuCsv = options.outputDirectory / "imu.csv";
