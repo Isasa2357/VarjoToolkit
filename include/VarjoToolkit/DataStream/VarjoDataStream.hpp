@@ -17,6 +17,10 @@
 // This class keeps ownership of std::shared_ptr<varjo_Session> when constructed
 // from shared ownership or VarjoSession, but also supports raw varjo_Session* for
 // direct Varjo C API interop.
+//
+// Copy and move are disabled intentionally. When a stream is started, the Varjo
+// runtime stores this object's address as callback user_data. Moving the object
+// would leave the runtime pointing at the old address.
 class VarjoDataStream {
 public:
     using Callback = std::function<void(const varjo_StreamFrame* frame, varjo_Session* session)>;
@@ -39,9 +43,8 @@ public:
 
     VarjoDataStream(const VarjoDataStream&) = delete;
     VarjoDataStream& operator=(const VarjoDataStream&) = delete;
-
-    VarjoDataStream(VarjoDataStream&& other) noexcept;
-    VarjoDataStream& operator=(VarjoDataStream&& other) noexcept;
+    VarjoDataStream(VarjoDataStream&&) = delete;
+    VarjoDataStream& operator=(VarjoDataStream&&) = delete;
 
     bool valid() const;
     explicit operator bool() const { return valid(); }
