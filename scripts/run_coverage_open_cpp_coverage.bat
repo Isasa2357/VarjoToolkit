@@ -13,11 +13,16 @@ set "REPORT_DIR=%ROOT_DIR%\out\coverage"
 set "CONFIG=Debug"
 set "EXCLUDE_REGEX=VarjoToolkitCoreSmokeTest"
 
-set "OCC_EXE=%ProgramFiles%\OpenCppCoverage\OpenCppCoverage.exe"
-if not exist "%OCC_EXE%" set "OCC_EXE=%ProgramFiles(x86)%\OpenCppCoverage\OpenCppCoverage.exe"
-if not exist "%OCC_EXE%" (
+set "OCC_EXE="
+for /f "delims=" %%I in ('where OpenCppCoverage.exe 2^>nul') do (
+    if not defined OCC_EXE set "OCC_EXE=%%I"
+)
+if not defined OCC_EXE if exist "%ProgramFiles%\OpenCppCoverage\OpenCppCoverage.exe" set "OCC_EXE=%ProgramFiles%\OpenCppCoverage\OpenCppCoverage.exe"
+if not defined OCC_EXE if exist "%ProgramFiles(x86)%\OpenCppCoverage\OpenCppCoverage.exe" set "OCC_EXE=%ProgramFiles(x86)%\OpenCppCoverage\OpenCppCoverage.exe"
+if not defined OCC_EXE (
     echo [ERROR] OpenCppCoverage.exe was not found.
-    echo         Install OpenCppCoverage or set PATH so it can be found at the default location.
+    echo         Install OpenCppCoverage or add its install directory to PATH.
+    echo         Typical path: C:\Program Files\OpenCppCoverage\OpenCppCoverage.exe
     exit /b 1
 )
 
