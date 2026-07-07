@@ -6,6 +6,12 @@ VarjoToolkit は、Varjo Native SDK を使う C++ アプリケーションから
 
 ## 主な機能
 
+- `VarjoSession`
+  - `varjo_SessionInit` / `varjo_SessionShutDown` の RAII wrapper
+  - 既存サービスに渡しやすい `std::shared_ptr<varjo_Session>` を保持
+- `VarjoFrameInfo`
+  - `varjo_CreateFrameInfo` / `varjo_FreeFrameInfo` / `varjo_WaitSync` の RAII wrapper
+  - 保存やキュー投入に使える `VarjoFrameInfoSnapshot` を提供
 - `VarjoEyeTrackingService`
   - Varjo gaze と eye measurements の取得
   - user IPD / HMD IPD / IPD adjustment mode の取得
@@ -35,6 +41,7 @@ VarjoToolkit/
   CMakeLists.txt
   include/
     VarjoToolkit/
+      Core/
       Services/
         EyeTracking/
         IMU/
@@ -45,6 +52,7 @@ VarjoToolkit/
   src/
   samples/
     ServiceLoggerSample/
+  tests/
 ```
 
 ## 必要環境
@@ -84,6 +92,26 @@ cmake --build out\build\default --config Release
 ```
 
 Boost が自動検出できない場合は、CMake の include search path から見える場所に Boost headers を置くか、CMake 側の探索設定を追加してください。
+
+## テスト
+
+テストは `VARJOTOOLKIT_BUILD_TESTS=ON` で有効化します。
+
+現在の `VarjoToolkitCoreSmokeTest` は、Varjo Base が起動しており、Varjo HMD が接続されている前提の smoke test です。`VarjoSession` の初期化、`VarjoFrameInfo` の作成、`varjo_WaitSync`、snapshot 取得、move ownership を確認します。
+
+```bat
+set "VARJO_SDK_ROOT=C:\Program Files\Varjo\Varjo Native SDK"
+
+cmake -S . -B out\build\test ^
+  -G "Visual Studio 17 2022" ^
+  -A x64 ^
+  -DVARJO_SDK_ROOT="%VARJO_SDK_ROOT%" ^
+  -DVARJOTOOLKIT_BUILD_SAMPLES=ON ^
+  -DVARJOTOOLKIT_BUILD_TESTS=ON
+
+cmake --build out\build\test --config Release
+ctest --test-dir out\build\test -C Release --output-on-failure
+```
 
 ## サンプル実行
 
@@ -153,6 +181,8 @@ target_link_libraries(YourApp
 
 ## 注意点
 
+- `VarjoSession` は default constructor で `varjo_SessionInit` を呼びます。遅延初期化したい場合は、将来的に別 factory を追加してください。
+- `VarjoFrameInfo` は `varjo_FrameInfo*` を所有します。長期保存や queue には `VarjoFrameInfoSnapshot` を使ってください。
 - `VarjoEyeTrackingService` は `varjo_WaitSync` で取得した frame info を内部バッファに保持し、gaze の `captureTime` に対応する frame info を使って座標変換します。
 - `VarjoIMUService` も `varjo_WaitSync` を使用します。レンダリングやカメラ処理への影響を抑えるため、worker thread は低優先度で動作します。
 - DataStream 系サービスでは、Varjo callback 内では CPU buffer のコピーだけを行い、ファイル書き出しは別 thread で行います。
