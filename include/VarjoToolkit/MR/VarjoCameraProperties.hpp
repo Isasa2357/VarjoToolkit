@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include <VarjoToolkit/Core/VarjoScopedLock.hpp>
 #include <VarjoToolkit/Core/VarjoSession.hpp>
 
 // Cached information for one Varjo MR camera property.
@@ -78,6 +79,7 @@ public:
     bool resetAll();
     bool applyNextModeOrValue(varjo_CameraPropertyType type);
 
+    // Compatibility helpers. Internally these now use VarjoScopedLock.
     bool acquireLock();
     void releaseLock();
     bool holdingLock() const;
@@ -115,6 +117,6 @@ private:
     std::vector<varjo_CameraPropertyType> property_types_;
     std::unordered_map<varjo_CameraPropertyType, VarjoCameraPropertyInfo> property_infos_;
 
-    bool holding_lock_ = false;
+    std::unique_ptr<VarjoScopedLock> camera_lock_;
     mutable std::string last_error_;
 };
