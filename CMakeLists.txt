@@ -4,11 +4,6 @@ project(VarjoToolkit VERSION 0.1.0 LANGUAGES CXX)
 
 option(VARJOTOOLKIT_BUILD_SAMPLES "Build VarjoToolkit sample applications" ON)
 option(VARJOTOOLKIT_BUILD_TESTS "Build VarjoToolkit tests. Some tests require a connected Varjo HMD/runtime." OFF)
-option(VARJOTOOLKIT_FETCH_BOOST "Download Boost headers with CMake when boost/circular_buffer.hpp is not found" ON)
-
-set(VARJOTOOLKIT_BOOST_URL
-    "https://archives.boost.io/release/1.85.0/source/boost_1_85_0.zip"
-    CACHE STRING "Boost source archive URL used when VARJOTOOLKIT_FETCH_BOOST is ON")
 
 # Backward compatibility for the previous option name.
 if (DEFINED VARJOSERVICES_BUILD_SAMPLES)
@@ -66,40 +61,15 @@ find_library(VARJO_LIBRARY
     HINTS ${_VARJO_LIBRARY_HINTS}
 )
 
-find_path(BOOST_INCLUDE_DIR
-    NAMES boost/circular_buffer.hpp
-)
-
-if (NOT BOOST_INCLUDE_DIR AND VARJOTOOLKIT_FETCH_BOOST)
-    include(FetchContent)
-    message(STATUS "Boost headers were not found. Fetching Boost headers from ${VARJOTOOLKIT_BOOST_URL}")
-    FetchContent_Declare(
-        varjotoolkit_boost_headers
-        URL "${VARJOTOOLKIT_BOOST_URL}"
-        DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    )
-    FetchContent_MakeAvailable(varjotoolkit_boost_headers)
-
-    find_path(BOOST_INCLUDE_DIR
-        NAMES boost/circular_buffer.hpp
-        HINTS "${varjotoolkit_boost_headers_SOURCE_DIR}"
-        NO_DEFAULT_PATH
-    )
-endif()
-
 if (NOT VARJO_INCLUDE_DIR)
     message(FATAL_ERROR "Varjo SDK include directory was not found. Set -DVARJO_SDK_ROOT=... or VARJO_INCLUDE_DIR.")
 endif()
 if (NOT VARJO_LIBRARY)
     message(FATAL_ERROR "Varjo SDK library was not found. Set -DVARJO_SDK_ROOT=... or VARJO_LIBRARY.")
 endif()
-if (NOT BOOST_INCLUDE_DIR)
-    message(FATAL_ERROR "Boost headers were not found. Set -DBOOST_INCLUDE_DIR=... or keep -DVARJOTOOLKIT_FETCH_BOOST=ON to download them with CMake.")
-endif()
 
 message(STATUS "Using Varjo include dir: ${VARJO_INCLUDE_DIR}")
 message(STATUS "Using Varjo library: ${VARJO_LIBRARY}")
-message(STATUS "Using Boost include dir: ${BOOST_INCLUDE_DIR}")
 
 add_library(VarjoToolkit STATIC
     src/VarjoSession.cpp
@@ -132,7 +102,6 @@ target_include_directories(VarjoToolkit
     PUBLIC
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
         "${VARJO_INCLUDE_DIR}"
-        "${BOOST_INCLUDE_DIR}"
 )
 
 target_link_libraries(VarjoToolkit
