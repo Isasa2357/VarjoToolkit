@@ -16,11 +16,15 @@
 #include <thread>
 #include <vector>
 
+#include <VarjoToolkit/DataStream/VarjoDataStream.hpp>
+
 // Service-style logger for Varjo eye camera data stream frames.
 //
 // The EyeCamera stream is a distorted monochrome camera stream used by Varjo's
-// eye tracking pipeline. This service copies CPU buffers in the Varjo callback
-// and writes raw buffers plus metadata CSV from a separate writer thread.
+// eye tracking pipeline. This service uses VarjoDataStream for stream start/stop
+// and VarjoDataStreamBufferLock in the callback path. It copies CPU buffers in
+// the callback and writes raw buffers plus metadata CSV from a separate writer
+// thread.
 class VarjoEyeCameraService {
 public:
     struct Paths {
@@ -67,11 +71,6 @@ private:
     };
 
 private:
-    static void onFrameReceivedStatic(
-        const varjo_StreamFrame* frame,
-        varjo_Session* session,
-        void* user_data);
-
     void onFrameReceived(const varjo_StreamFrame* frame, varjo_Session* callback_session);
     void captureChannel(const varjo_StreamFrame& frame, varjo_Session* callback_session, varjo_ChannelIndex channel_index);
 
@@ -92,12 +91,12 @@ private:
 
 private:
     std::shared_ptr<varjo_Session> session_;
+    VarjoDataStream data_stream_;
     std::filesystem::path output_directory_;
     std::wstring base_filename_;
     size_t queue_capacity_ = 180;
 
     varjo_StreamConfig stream_config_{};
-    varjo_StreamId stream_id_ = varjo_InvalidId;
     varjo_ChannelFlag channel_flags_ = varjo_ChannelFlag_None;
 
     std::filesystem::path left_raw_path_;
@@ -116,7 +115,6 @@ private:
 
     std::thread writer_thread_;
     std::atomic_bool stop_requested_{ true };
-    std::atomic_bool stream_started_{ false };
 
     mutable std::mutex state_mutex_;
     bool running_ = false;
