@@ -3,6 +3,7 @@
 #include <Varjo.h>
 #include <Varjo_mr.h>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
