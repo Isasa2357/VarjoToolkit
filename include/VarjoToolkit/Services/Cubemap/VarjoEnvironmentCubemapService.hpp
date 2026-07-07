@@ -17,7 +17,6 @@
 #include <vector>
 
 #include <VarjoToolkit/DataStream/VarjoDataStream.hpp>
-#include <VarjoToolkit/Utilities/VarjoTimestampMapping.hpp>
 
 class VarjoEnvironmentCubemapService {
 public:
@@ -83,7 +82,6 @@ private:
 private:
     std::shared_ptr<varjo_Session> session_;
     VarjoDataStream data_stream_;
-    VarjoTimestampMapping timestamp_mapping_;
     std::filesystem::path output_directory_;
     std::wstring base_filename_;
     size_t queue_capacity_ = 90;
