@@ -1,6 +1,5 @@
 #include <VarjoToolkit/DataStream/VarjoDataStream.hpp>
 
-#include <algorithm>
 #include <cstdint>
 #include <utility>
 
@@ -29,43 +28,6 @@ VarjoDataStream::VarjoDataStream(const VarjoSession& session)
 VarjoDataStream::~VarjoDataStream()
 {
     stop();
-}
-
-VarjoDataStream::VarjoDataStream(VarjoDataStream&& other) noexcept
-{
-    std::lock_guard<std::mutex> other_state_lock(other.state_mutex_);
-    std::lock_guard<std::mutex> other_callback_lock(other.callback_mutex_);
-
-    session_owner_ = std::move(other.session_owner_);
-    session_ = std::exchange(other.session_, nullptr);
-    config_ = other.config_;
-    stream_id_ = std::exchange(other.stream_id_, varjo_InvalidId);
-    channel_flags_ = std::exchange(other.channel_flags_, varjo_ChannelFlag_None);
-    running_ = std::exchange(other.running_, false);
-    last_error_ = std::move(other.last_error_);
-    callback_ = std::move(other.callback_);
-}
-
-VarjoDataStream& VarjoDataStream::operator=(VarjoDataStream&& other) noexcept
-{
-    if (this != &other) {
-        stop();
-
-        std::lock_guard<std::mutex> self_state_lock(state_mutex_);
-        std::lock_guard<std::mutex> self_callback_lock(callback_mutex_);
-        std::lock_guard<std::mutex> other_state_lock(other.state_mutex_);
-        std::lock_guard<std::mutex> other_callback_lock(other.callback_mutex_);
-
-        session_owner_ = std::move(other.session_owner_);
-        session_ = std::exchange(other.session_, nullptr);
-        config_ = other.config_;
-        stream_id_ = std::exchange(other.stream_id_, varjo_InvalidId);
-        channel_flags_ = std::exchange(other.channel_flags_, varjo_ChannelFlag_None);
-        running_ = std::exchange(other.running_, false);
-        last_error_ = std::move(other.last_error_);
-        callback_ = std::move(other.callback_);
-    }
-    return *this;
 }
 
 bool VarjoDataStream::valid() const
