@@ -7,6 +7,8 @@
 
 #include "WrapperExamples.hpp"
 
+#include <VarjoToolkit/Services/Event/VarjoEventService.hpp>
+#include <VarjoToolkit/Services/MarkerTracking/VarjoMarkerTrackingService.hpp>
 #include <VarjoToolkit/Services/EyeTracking/VarjoEyeTrackingService.hpp>
 #include <VarjoToolkit/Services/IMU/VarjoIMUService.hpp>
 #include <VarjoToolkit/Services/VST/VarjoVSTService.hpp>
@@ -49,6 +51,8 @@ BOOL WINAPI consoleCtrlHandler(DWORD eventType)
 struct Options {
     std::filesystem::path outputDirectory = "varjo_service_logs";
     int seconds = 30;
+    bool enableEvent = true;
+    bool enableMarkerTracking = true;
     bool enableEyeTracking = true;
     bool enableIMU = true;
     bool enableVST = true;
@@ -69,6 +73,8 @@ void printUsage()
         << "Options:\n"
         << "  --out <dir>          Output directory. Default: varjo_service_logs\n"
         << "  --seconds <n>        Logging duration in seconds. 0 means run until Ctrl+C. Default: 30\n"
+        << "  --no-event          Disable VarjoEventService\n"
+        << "  --no-marker         Disable VarjoMarkerTrackingService\n"
         << "  --no-eye            Disable VarjoEyeTrackingService\n"
         << "  --no-imu            Disable VarjoIMUService\n"
         << "  --no-vst            Disable VarjoVSTService\n"
@@ -78,6 +84,8 @@ void printUsage()
         << "  --help              Show this message\n"
         << "\n"
         << "Notes:\n"
+        << "  Event logging records Varjo runtime events through VarjoEventQueue.\n"
+        << "  Marker logging records object marker component and pose rows through VarjoWorld.\n"
         << "  VST logging writes MP4 through ffmpeg. Put ffmpeg.exe in PATH, or use --no-vst.\n"
         << "  EyeCamera and EnvironmentCubemap logging write raw binary buffers plus metadata CSV.\n"
         << "  DataStream-based services require the corresponding Varjo Base license/capability.\n"
@@ -125,6 +133,14 @@ bool parseArguments(int argc, char** argv, Options& options)
                 return false;
             }
             options.seconds = seconds;
+            continue;
+        }
+        if (arg == "--no-event") {
+            options.enableEvent = false;
+            continue;
+        }
+        if (arg == "--no-marker") {
+            options.enableMarkerTracking = false;
             continue;
         }
         if (arg == "--no-eye") {
@@ -246,10 +262,14 @@ int main(int argc, char** argv)
 
     printWrapperUsageExamples(session);
 
+    const auto eventCsv = options.outputDirectory / "events.csv";
+    const auto markerCsv = options.outputDirectory / "markers.csv";
     const auto eyeCsv = options.outputDirectory / "eye_tracking.csv";
     const auto imuCsv = options.outputDirectory / "imu.csv";
     const auto timestampMappingCsv = options.outputDirectory / "timestamp_mapping.csv";
 
+    std::unique_ptr<VarjoEventService> eventService;
+    std::unique_ptr<VarjoMarkerTrackingService> markerService;
     std::unique_ptr<VarjoEyeTrackingService> eyeTrackingService;
     std::unique_ptr<VarjoIMUService> imuService;
     std::unique_ptr<VarjoVSTService> vstService;
@@ -269,11 +289,29 @@ int main(int argc, char** argv)
         }
     }
 
+    bool eventStarted = false;
+    bool markerStarted = false;
     bool eyeTrackingStarted = false;
     bool imuStarted = false;
     bool vstStarted = false;
     bool eyeCameraStarted = false;
     bool cubemapStarted = false;
+
+    if (options.enableEvent) {
+        eventService = std::make_unique<VarjoEventService>(session, eventCsv, 1000, 10, 64);
+        eventStarted = eventService->start();
+        if (!eventStarted) {
+            std::wcerr << L"VarjoEventService failed to start: " << eventService->lastError().c_str() << L"\n";
+        }
+    }
+
+    if (options.enableMarkerTracking) {
+        markerService = std::make_unique<VarjoMarkerTrackingService>(session, markerCsv, 1000, 33);
+        markerStarted = markerService->start();
+        if (!markerStarted) {
+            std::wcerr << L"VarjoMarkerTrackingService failed to start: " << markerService->lastError().c_str() << L"\n";
+        }
+    }
 
     if (options.enableEyeTracking) {
         eyeTrackingService = std::make_unique<VarjoEyeTrackingService>(
@@ -321,12 +359,18 @@ int main(int argc, char** argv)
         }
     }
 
-    if (!eyeTrackingStarted && !imuStarted && !vstStarted && !eyeCameraStarted && !cubemapStarted && !options.enableTimestampMapping) {
+    if (!eventStarted && !markerStarted && !eyeTrackingStarted && !imuStarted && !vstStarted && !eyeCameraStarted && !cubemapStarted && !options.enableTimestampMapping) {
         std::cerr << "No service or utility output could be started.\n";
         return 2;
     }
 
     std::cout << "Logging started. Press Ctrl+C to stop.\n";
+    if (eventStarted) {
+        printPath("event CSV", eventCsv);
+    }
+    if (markerStarted) {
+        printPath("marker CSV", markerCsv);
+    }
     if (eyeTrackingStarted) {
         printPath("eye tracking CSV", eyeCsv);
     }
@@ -339,6 +383,8 @@ int main(int argc, char** argv)
 
     const auto loopStart = std::chrono::steady_clock::now();
     int64_t lastPrintedSecond = -1;
+    uint64_t totalEventsRead = 0;
+    uint64_t totalMarkersRead = 0;
     uint64_t totalEyeSamplesRead = 0;
 
     while (!g_stopRequested.load()) {
@@ -346,6 +392,14 @@ int main(int argc, char** argv)
             break;
         }
 
+        if (eventStarted && eventService) {
+            auto events = eventService->requestEvents();
+            totalEventsRead += static_cast<uint64_t>(events.size());
+        }
+        if (markerStarted && markerService) {
+            auto markers = markerService->requestMarkers();
+            totalMarkersRead += static_cast<uint64_t>(markers.size());
+        }
         if (eyeTrackingStarted && eyeTrackingService) {
             auto eyeSamples = eyeTrackingService->requestData();
             totalEyeSamplesRead += static_cast<uint64_t>(eyeSamples.size());
@@ -362,6 +416,14 @@ int main(int argc, char** argv)
                     std::cout << " timestampRows=" << timestampMappingRows
                               << " timestampDeltaUs=" << timestampSample.deltaVarjoUnixMinusSystemUs;
                 }
+            }
+            if (eventStarted && eventService) {
+                std::cout << " eventRows=" << eventService->rowCount()
+                          << " eventsRead=" << totalEventsRead;
+            }
+            if (markerStarted && markerService) {
+                std::cout << " markerRows=" << markerService->rowCount()
+                          << " markersRead=" << totalMarkersRead;
             }
             if (eyeTrackingStarted) {
                 std::cout << " eyeSamplesRead=" << totalEyeSamplesRead;
@@ -413,6 +475,12 @@ int main(int argc, char** argv)
     }
     if (eyeTrackingService) {
         eyeTrackingService->stop();
+    }
+    if (markerService) {
+        markerService->stop();
+    }
+    if (eventService) {
+        eventService->stop();
     }
 
     std::cout << "Done.\n";
