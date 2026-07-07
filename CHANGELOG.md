@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Removed the core Boost dependency by replacing the eye tracking frame history `boost::circular_buffer` usage with `std::deque`-based bounded history logic.
+- Removed Boost discovery / FetchContent fallback from CMake.
+- Documented the VarjoToolkit dependency and architecture policy in `docs/ARCHITECTURE.md`.
+- Clarified that VarjoToolkit core must not depend on D3DHelper / D3D11Helper / D3D12Helper, OpenCV, JSON libraries, camera SDK wrappers, UI frameworks, or ML frameworks.
+- Clarified that native DirectX SDK boundary types are allowed when required by Varjo Native SDK APIs, and that D3DHelper may coexist in applications or samples without becoming a VarjoToolkit dependency.
+
 ## v0.1.0 - Initial wrapper release
 
 This is the first tagged release of VarjoToolkit.
