@@ -2,7 +2,6 @@
 
 #include <iomanip>
 #include <sstream>
-#include <utility>
 
 namespace VarjoToolkit::Csv {
 namespace {
@@ -28,48 +27,6 @@ std::vector<std::string> indexedFields(const std::string& itemName, size_t count
     return out;
 }
 
-void appendAll(std::vector<std::string>& dst, std::initializer_list<std::string> src)
-{
-    dst.insert(dst.end(), src.begin(), src.end());
-}
-
-void appendVectorHeaderFields(std::vector<std::string>& dst, const std::string& prefix)
-{
-    appendAll(dst, {
-        scopedName(prefix, "x"),
-        scopedName(prefix, "y"),
-        scopedName(prefix, "z")
-    });
-}
-
-void appendVector2HeaderFields(std::vector<std::string>& dst, const std::string& prefix)
-{
-    appendAll(dst, {
-        scopedName(prefix, "x"),
-        scopedName(prefix, "y")
-    });
-}
-
-void appendMatrixHeaderFields(std::vector<std::string>& dst, const std::string& prefix)
-{
-    const auto fields = makeHeader(prefix, indexedFields("m", 16));
-    std::stringstream ss(fields);
-    std::string item;
-    while (std::getline(ss, item, ',')) {
-        dst.push_back(item);
-    }
-}
-
-void appendMatrix3x3HeaderFields(std::vector<std::string>& dst, const std::string& prefix)
-{
-    const auto fields = makeHeader(prefix, indexedFields("m", 9));
-    std::stringstream ss(fields);
-    std::string item;
-    while (std::getline(ss, item, ',')) {
-        dst.push_back(item);
-    }
-}
-
 std::vector<std::string> splitCsvFields(const std::string& csv)
 {
     std::vector<std::string> out;
@@ -79,12 +36,6 @@ std::vector<std::string> splitCsvFields(const std::string& csv)
         out.push_back(item);
     }
     return out;
-}
-
-void appendCsvFields(std::vector<std::string>& dst, const std::string& csv)
-{
-    const auto fields = splitCsvFields(csv);
-    dst.insert(dst.end(), fields.begin(), fields.end());
 }
 
 } // namespace
