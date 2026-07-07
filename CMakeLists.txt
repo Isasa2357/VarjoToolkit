@@ -4,6 +4,7 @@ project(VarjoToolkit VERSION 0.1.0 LANGUAGES CXX)
 
 option(VARJOTOOLKIT_BUILD_SAMPLES "Build VarjoToolkit sample applications" ON)
 option(VARJOTOOLKIT_BUILD_TESTS "Build VarjoToolkit tests. Some tests require a connected Varjo HMD/runtime." OFF)
+option(VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS "Build experimental Varjo video post process shader wrapper" ON)
 
 # Backward compatibility for the previous option name.
 if (DEFINED VARJOSERVICES_BUILD_SAMPLES)
@@ -17,11 +18,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(VARJO_SDK_ROOT "" CACHE PATH "Path to the Varjo Native SDK root directory")
 
 set(_VARJO_INCLUDE_HINTS)
+set(_VARJO_EXPERIMENTAL_INCLUDE_HINTS)
 set(_VARJO_LIBRARY_HINTS)
 if (VARJO_SDK_ROOT)
     list(APPEND _VARJO_INCLUDE_HINTS
         "${VARJO_SDK_ROOT}/include"
         "${VARJO_SDK_ROOT}"
+    )
+    list(APPEND _VARJO_EXPERIMENTAL_INCLUDE_HINTS
+        "${VARJO_SDK_ROOT}/include_experimental"
     )
     list(APPEND _VARJO_LIBRARY_HINTS
         "${VARJO_SDK_ROOT}/lib"
@@ -38,6 +43,9 @@ if (DEFINED ENV{VARJO_SDK_ROOT})
     list(APPEND _VARJO_INCLUDE_HINTS
         "$ENV{VARJO_SDK_ROOT}/include"
         "$ENV{VARJO_SDK_ROOT}"
+    )
+    list(APPEND _VARJO_EXPERIMENTAL_INCLUDE_HINTS
+        "$ENV{VARJO_SDK_ROOT}/include_experimental"
     )
     list(APPEND _VARJO_LIBRARY_HINTS
         "$ENV{VARJO_SDK_ROOT}/lib"
@@ -56,6 +64,18 @@ find_path(VARJO_INCLUDE_DIR
     HINTS ${_VARJO_INCLUDE_HINTS}
 )
 
+if (VARJO_INCLUDE_DIR)
+    get_filename_component(_VARJO_INCLUDE_PARENT "${VARJO_INCLUDE_DIR}" DIRECTORY)
+    list(APPEND _VARJO_EXPERIMENTAL_INCLUDE_HINTS
+        "${_VARJO_INCLUDE_PARENT}/include_experimental"
+    )
+endif()
+
+find_path(VARJO_EXPERIMENTAL_INCLUDE_DIR
+    NAMES Varjo_mr_experimental.h Varjo_types_mr_experimental.h
+    HINTS ${_VARJO_EXPERIMENTAL_INCLUDE_HINTS}
+)
+
 find_library(VARJO_LIBRARY
     NAMES VarjoLib varjo
     HINTS ${_VARJO_LIBRARY_HINTS}
@@ -67,11 +87,17 @@ endif()
 if (NOT VARJO_LIBRARY)
     message(FATAL_ERROR "Varjo SDK library was not found. Set -DVARJO_SDK_ROOT=... or VARJO_LIBRARY.")
 endif()
+if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS AND NOT VARJO_EXPERIMENTAL_INCLUDE_DIR)
+    message(FATAL_ERROR "Varjo experimental include directory was not found. Set -DVARJO_SDK_ROOT=... or VARJO_EXPERIMENTAL_INCLUDE_DIR=..., or disable -DVARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS=OFF.")
+endif()
 
 message(STATUS "Using Varjo include dir: ${VARJO_INCLUDE_DIR}")
 message(STATUS "Using Varjo library: ${VARJO_LIBRARY}")
+if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS)
+    message(STATUS "Using Varjo experimental include dir: ${VARJO_EXPERIMENTAL_INCLUDE_DIR}")
+endif()
 
-add_library(VarjoToolkit STATIC
+set(VARJOTOOLKIT_SOURCES
     src/VarjoSession.cpp
     src/VarjoFrameInfo.cpp
     src/VarjoScopedLock.cpp
@@ -96,6 +122,16 @@ add_library(VarjoToolkit STATIC
     src/VarjoTimestampMapping.cpp
 )
 
+if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS)
+    list(APPEND VARJOTOOLKIT_SOURCES
+        src/VarjoVideoPostProcessShader.cpp
+    )
+endif()
+
+add_library(VarjoToolkit STATIC
+    ${VARJOTOOLKIT_SOURCES}
+)
+
 add_library(VarjoToolkit::VarjoToolkit ALIAS VarjoToolkit)
 # Compatibility alias for older sample/application CMakeLists.
 add_library(VarjoServices ALIAS VarjoToolkit)
@@ -105,6 +141,13 @@ target_include_directories(VarjoToolkit
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
         "${VARJO_INCLUDE_DIR}"
 )
+
+if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS)
+    target_include_directories(VarjoToolkit
+        PUBLIC
+            "${VARJO_EXPERIMENTAL_INCLUDE_DIR}"
+    )
+endif()
 
 target_link_libraries(VarjoToolkit
     PUBLIC
@@ -120,6 +163,12 @@ target_compile_definitions(VarjoToolkit
         VARJOTOOLKIT_VERSION_PATCH=${PROJECT_VERSION_PATCH}
         VARJOTOOLKIT_VERSION_STRING="${PROJECT_VERSION}"
 )
+
+if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS)
+    target_compile_definitions(VarjoToolkit PUBLIC VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS=1)
+else()
+    target_compile_definitions(VarjoToolkit PUBLIC VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS=0)
+endif()
 
 if (MSVC)
     target_compile_options(VarjoToolkit PRIVATE /utf-8 /W4 /permissive-)
@@ -186,6 +235,13 @@ if (VARJOTOOLKIT_BUILD_TESTS)
         tests/EventMarkerServicesTest.cpp
     )
     list(APPEND _varjotoolkit_test_targets VarjoToolkitEventMarkerServicesTest)
+
+    if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS)
+        add_executable(VarjoToolkitVideoPostProcessShaderTest
+            tests/VideoPostProcessShaderTest.cpp
+        )
+        list(APPEND _varjotoolkit_test_targets VarjoToolkitVideoPostProcessShaderTest)
+    endif()
 
     foreach(_varjotoolkit_test_target IN LISTS _varjotoolkit_test_targets)
         target_link_libraries(${_varjotoolkit_test_target}
