@@ -1,5 +1,6 @@
 add_executable(VarjoServiceLoggerSample
     main.cpp
+    WrapperExamples.cpp
 )
 
 target_link_libraries(VarjoServiceLoggerSample
