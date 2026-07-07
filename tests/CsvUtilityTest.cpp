@@ -1,5 +1,6 @@
 #include <VarjoToolkit/Utilities/VarjoCsv.hpp>
 
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -26,23 +27,20 @@ bool expectEqual(const std::string& actual, const std::string& expected, const s
     return true;
 }
 
-std::vector<std::string> splitCsv(const std::string& csv)
+size_t csvFieldCountByComma(const std::string& csv)
 {
-    std::vector<std::string> out;
-    std::stringstream ss(csv);
-    std::string item;
-    while (std::getline(ss, item, ',')) {
-        out.push_back(item);
+    if (csv.empty()) {
+        return 0;
     }
-    return out;
+    return static_cast<size_t>(std::count(csv.begin(), csv.end(), ',')) + 1;
 }
 
 bool expectFieldCountEqual(const std::string& row, const std::string& header, const std::string& label)
 {
-    const auto row_fields = splitCsv(row);
-    const auto header_fields = splitCsv(header);
-    if (row_fields.size() != header_fields.size()) {
-        fail(label, std::to_string(row_fields.size()), std::to_string(header_fields.size()));
+    const auto row_count = csvFieldCountByComma(row);
+    const auto header_count = csvFieldCountByComma(header);
+    if (row_count != header_count) {
+        fail(label, std::to_string(row_count), std::to_string(header_count));
         return false;
     }
     return true;
