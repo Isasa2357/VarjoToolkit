@@ -2,13 +2,17 @@
 
 #include <Varjo.h>
 #include <Varjo_datastream.h>
+#include <Varjo_events.h>
+#include <Varjo_world.h>
 
 #include <cstddef>
+#include <cstdint>
 #include <initializer_list>
 #include <string>
 #include <vector>
 
 #include <VarjoToolkit/Core/VarjoFrameInfo.hpp>
+#include <VarjoToolkit/MR/VarjoCameraProperties.hpp>
 #include <VarjoToolkit/Services/EyeTracking/VarjoEyeTrackingService.hpp>
 
 namespace VarjoToolkit::Csv {
@@ -18,6 +22,7 @@ namespace VarjoToolkit::Csv {
 std::string number(double value);
 std::string integer(long long value);
 std::string boolean(bool value);
+std::string pointer(const void* value);
 
 std::string join(std::initializer_list<std::string> fields);
 std::string join(const std::vector<std::string>& fields);
@@ -59,6 +64,38 @@ std::string headerForBufferMetadata(const std::string& name);
 std::string toCsv(const varjo_CameraIntrinsics2& value);
 std::string headerForCameraIntrinsics2(const std::string& name);
 
+std::string toCsv(const varjo_StreamConfig& value);
+std::string headerForStreamConfig(const std::string& name);
+
+std::string toCsv(const varjo_DistortedColorFrameMetadata& value);
+std::string headerForDistortedColorFrameMetadata(const std::string& name);
+
+std::string toCsv(const varjo_EnvironmentCubemapFrameMetadata& value);
+std::string headerForEnvironmentCubemapFrameMetadata(const std::string& name);
+
+std::string toCsv(const varjo_EyeCameraFrameMetadata& value);
+std::string headerForEyeCameraFrameMetadata(const std::string& name);
+
+std::string toCsv(const varjo_StreamFrame& value);
+std::string headerForStreamFrame(const std::string& name);
+
+std::string toCsv(const varjo_WorldObject& value);
+std::string headerForWorldObject(const std::string& name);
+
+std::string toCsv(const varjo_WorldObjectMarkerComponent& value);
+std::string headerForWorldObjectMarkerComponent(const std::string& name);
+
+std::string toCsv(const varjo_Mesh2Df& value);
+std::string toCsv(const varjo_Mesh2Df& value, size_t fixedVertexCount);
+std::string headerForMesh2Df(const std::string& name);
+std::string headerForMesh2Df(const std::string& name, size_t fixedVertexCount);
+
+std::string toCsv(const varjo_Event& value);
+std::string headerForEvent(const std::string& name);
+
+std::string toCsv(const varjo_CameraPropertyValue& value);
+std::string headerForCameraPropertyValue(const std::string& name);
+
 std::string toCsv(const varjo_Gaze& value);
 std::string headerForGaze(const std::string& name);
 
@@ -73,6 +110,9 @@ std::string headerForProjectedGazePosition(const std::string& name);
 std::string toCsv(const VarjoFrameInfoSnapshot& value);
 std::string toCsv(const VarjoFrameInfoSnapshot& value, size_t fixedViewCount);
 std::string headerForFrameInfoSnapshot(const std::string& name, size_t viewCount);
+
+std::string toCsv(const VarjoCameraPropertyInfo& value);
+std::string headerForCameraPropertyInfo(const std::string& name);
 
 // Typed header helper. This lets callers write:
 //   Csv::header<varjo_Vector3D>("coord") -> "coord.x,coord.y,coord.z"
@@ -104,6 +144,36 @@ template <>
 inline std::string header<varjo_CameraIntrinsics2>(const std::string& name) { return headerForCameraIntrinsics2(name); }
 
 template <>
+inline std::string header<varjo_StreamConfig>(const std::string& name) { return headerForStreamConfig(name); }
+
+template <>
+inline std::string header<varjo_DistortedColorFrameMetadata>(const std::string& name) { return headerForDistortedColorFrameMetadata(name); }
+
+template <>
+inline std::string header<varjo_EnvironmentCubemapFrameMetadata>(const std::string& name) { return headerForEnvironmentCubemapFrameMetadata(name); }
+
+template <>
+inline std::string header<varjo_EyeCameraFrameMetadata>(const std::string& name) { return headerForEyeCameraFrameMetadata(name); }
+
+template <>
+inline std::string header<varjo_StreamFrame>(const std::string& name) { return headerForStreamFrame(name); }
+
+template <>
+inline std::string header<varjo_WorldObject>(const std::string& name) { return headerForWorldObject(name); }
+
+template <>
+inline std::string header<varjo_WorldObjectMarkerComponent>(const std::string& name) { return headerForWorldObjectMarkerComponent(name); }
+
+template <>
+inline std::string header<varjo_Mesh2Df>(const std::string& name) { return headerForMesh2Df(name); }
+
+template <>
+inline std::string header<varjo_Event>(const std::string& name) { return headerForEvent(name); }
+
+template <>
+inline std::string header<varjo_CameraPropertyValue>(const std::string& name) { return headerForCameraPropertyValue(name); }
+
+template <>
 inline std::string header<varjo_Gaze>(const std::string& name) { return headerForGaze(name); }
 
 template <>
@@ -111,5 +181,8 @@ inline std::string header<varjo_EyeMeasurements>(const std::string& name) { retu
 
 template <>
 inline std::string header<VarjoProjectedGazePosition>(const std::string& name) { return headerForProjectedGazePosition(name); }
+
+template <>
+inline std::string header<VarjoCameraPropertyInfo>(const std::string& name) { return headerForCameraPropertyInfo(name); }
 
 } // namespace VarjoToolkit::Csv
