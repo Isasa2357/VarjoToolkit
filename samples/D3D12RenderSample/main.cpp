@@ -244,7 +244,10 @@ public:
     ~D3D12TriangleRenderer()
     {
         if (queue_ && fence_) {
-            waitForGpu();
+            try {
+                waitForGpu();
+            } catch (...) {
+            }
         }
         if (fence_event_) {
             CloseHandle(fence_event_);
@@ -403,13 +406,38 @@ private:
         }
         throwIfFailed(device_->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&root_signature_)), "CreateRootSignature");
 
+        D3D12_RENDER_TARGET_BLEND_DESC rtBlend{};
+        rtBlend.BlendEnable = FALSE;
+        rtBlend.LogicOpEnable = FALSE;
+        rtBlend.SrcBlend = D3D12_BLEND_ONE;
+        rtBlend.DestBlend = D3D12_BLEND_ZERO;
+        rtBlend.BlendOp = D3D12_BLEND_OP_ADD;
+        rtBlend.SrcBlendAlpha = D3D12_BLEND_ONE;
+        rtBlend.DestBlendAlpha = D3D12_BLEND_ZERO;
+        rtBlend.BlendOpAlpha = D3D12_BLEND_OP_ADD;
+        rtBlend.LogicOp = D3D12_LOGIC_OP_NOOP;
+        rtBlend.RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+
+        D3D12_DEPTH_STENCIL_DESC depthStencil{};
+        depthStencil.DepthEnable = FALSE;
+        depthStencil.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+        depthStencil.DepthFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        depthStencil.StencilEnable = FALSE;
+        depthStencil.StencilReadMask = D3D12_DEFAULT_STENCIL_READ_MASK;
+        depthStencil.StencilWriteMask = D3D12_DEFAULT_STENCIL_WRITE_MASK;
+        depthStencil.FrontFace.StencilFailOp = D3D12_STENCIL_OP_KEEP;
+        depthStencil.FrontFace.StencilDepthFailOp = D3D12_STENCIL_OP_KEEP;
+        depthStencil.FrontFace.StencilPassOp = D3D12_STENCIL_OP_KEEP;
+        depthStencil.FrontFace.StencilFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+        depthStencil.BackFace = depthStencil.FrontFace;
+
         D3D12_GRAPHICS_PIPELINE_STATE_DESC pso{};
         pso.pRootSignature = root_signature_.Get();
         pso.VS = D3D12_SHADER_BYTECODE{vs->GetBufferPointer(), vs->GetBufferSize()};
         pso.PS = D3D12_SHADER_BYTECODE{ps->GetBufferPointer(), ps->GetBufferSize()};
         pso.BlendState.AlphaToCoverageEnable = FALSE;
         pso.BlendState.IndependentBlendEnable = FALSE;
-        pso.BlendState.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+        pso.BlendState.RenderTarget[0] = rtBlend;
         pso.SampleMask = UINT_MAX;
         pso.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
         pso.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
@@ -422,8 +450,7 @@ private:
         pso.RasterizerState.AntialiasedLineEnable = FALSE;
         pso.RasterizerState.ForcedSampleCount = 0;
         pso.RasterizerState.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
-        pso.DepthStencilState.DepthEnable = FALSE;
-        pso.DepthStencilState.StencilEnable = FALSE;
+        pso.DepthStencilState = depthStencil;
         pso.InputLayout.pInputElementDescs = nullptr;
         pso.InputLayout.NumElements = 0;
         pso.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
