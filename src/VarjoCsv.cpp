@@ -102,8 +102,7 @@ std::vector<std::string> emptyEventPayloadFields()
         {},      // dataStreamStart.streamId
         {},      // dataStreamStop.streamId
         {},      // textureSizeChange.typeMask
-        {},      // visibilityMeshChange.viewIndex
-        {}       // worldObjectDiscovery.worldHandle
+        {}       // visibilityMeshChange.viewIndex
     };
 }
 
@@ -513,7 +512,7 @@ std::string headerForMesh2Df(const std::string& name, size_t fixedVertexCount)
 std::string toCsv(const varjo_Event& value)
 {
     std::vector<std::string> fields;
-    fields.reserve(17);
+    fields.reserve(16);
     fields.push_back(integer(value.header.type));
     fields.push_back(integer(value.header.timestamp));
 
@@ -559,9 +558,6 @@ std::string toCsv(const varjo_Event& value)
     case varjo_EventType_VisibilityMeshChange:
         payload[13] = integer(value.data.visibilityMeshChange.viewIndex);
         break;
-    case varjo_EventType_WorldObjectDiscovery:
-        payload[14] = pointer(value.data.worldObjectDiscovery.worldHandle);
-        break;
     default:
         break;
     }
@@ -588,8 +584,7 @@ std::string headerForEvent(const std::string& name)
             "dataStreamStart.streamId",
             "dataStreamStop.streamId",
             "textureSizeChange.typeMask",
-            "visibilityMeshChange.viewIndex",
-            "worldObjectDiscovery.worldHandle"
+            "visibilityMeshChange.viewIndex"
         })
     });
 }
