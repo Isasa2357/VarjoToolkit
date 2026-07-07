@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(VarjoToolkit LANGUAGES CXX)
+project(VarjoToolkit VERSION 0.1.0 LANGUAGES CXX)
 
 option(VARJOTOOLKIT_BUILD_SAMPLES "Build VarjoToolkit sample applications" ON)
 option(VARJOTOOLKIT_BUILD_TESTS "Build VarjoToolkit tests. Some tests require a connected Varjo HMD/runtime." OFF)
@@ -144,6 +144,10 @@ target_compile_definitions(VarjoToolkit
     PUBLIC
         NOMINMAX
         WIN32_LEAN_AND_MEAN
+        VARJOTOOLKIT_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+        VARJOTOOLKIT_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+        VARJOTOOLKIT_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+        VARJOTOOLKIT_VERSION_STRING="${PROJECT_VERSION}"
 )
 
 if (MSVC)
