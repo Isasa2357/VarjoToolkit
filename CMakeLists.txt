@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 project(VarjoToolkit LANGUAGES CXX)
 
 option(VARJOTOOLKIT_BUILD_SAMPLES "Build VarjoToolkit sample applications" ON)
+option(VARJOTOOLKIT_BUILD_TESTS "Build VarjoToolkit tests. Some tests require a connected Varjo HMD/runtime." OFF)
 
 # Backward compatibility for the previous option name.
 if (DEFINED VARJOSERVICES_BUILD_SAMPLES)
@@ -75,6 +76,8 @@ if (NOT BOOST_INCLUDE_DIR)
 endif()
 
 add_library(VarjoToolkit STATIC
+    src/VarjoSession.cpp
+    src/VarjoFrameInfo.cpp
     src/VarjoEyeTrackingService.cpp
     src/VarjoIMUService.cpp
     src/VarjoVSTService.cpp
@@ -114,4 +117,31 @@ endif()
 if (VARJOTOOLKIT_BUILD_SAMPLES)
     add_subdirectory(samples/ServiceLoggerSample)
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT VarjoServiceLoggerSample)
+endif()
+
+if (VARJOTOOLKIT_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(VarjoToolkitCoreSmokeTest
+        tests/CoreWrappersSmokeTest.cpp
+    )
+
+    target_link_libraries(VarjoToolkitCoreSmokeTest
+        PRIVATE
+            VarjoToolkit::VarjoToolkit
+    )
+
+    target_compile_definitions(VarjoToolkitCoreSmokeTest
+        PRIVATE
+            NOMINMAX
+            WIN32_LEAN_AND_MEAN
+    )
+
+    if (MSVC)
+        target_compile_options(VarjoToolkitCoreSmokeTest PRIVATE /utf-8 /W4 /permissive-)
+    else()
+        target_compile_options(VarjoToolkitCoreSmokeTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+
+    add_test(NAME VarjoToolkitCoreSmokeTest COMMAND VarjoToolkitCoreSmokeTest)
 endif()
