@@ -30,9 +30,18 @@ add_subdirectory(
     "${CMAKE_BINARY_DIR}/samples/D3D12RenderSample"
 )
 
+add_subdirectory(
+    "${CMAKE_CURRENT_LIST_DIR}/../OcclusionMeshDumpSample"
+    "${CMAKE_BINARY_DIR}/samples/OcclusionMeshDumpSample"
+)
+
 if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS)
     add_subdirectory(
         "${CMAKE_CURRENT_LIST_DIR}/../VideoPostProcessD3D11Sample"
         "${CMAKE_BINARY_DIR}/samples/VideoPostProcessD3D11Sample"
+    )
+    add_subdirectory(
+        "${CMAKE_CURRENT_LIST_DIR}/../VideoPostProcessD3D12Sample"
+        "${CMAKE_BINARY_DIR}/samples/VideoPostProcessD3D12Sample"
     )
 endif()
