@@ -4,6 +4,9 @@
 
 #include <VarjoToolkit/Services/IMU/VarjoIMUService.hpp>
 
+#include <VarjoToolkit/Core/VarjoFrameInfo.hpp>
+#include <VarjoToolkit/Utilities/VarjoCsv.hpp>
+
 #include <Windows.h>
 
 #include <algorithm>
@@ -69,16 +72,6 @@ int64_t convertVarjoTimeToUnixUs(varjo_Session* session, varjo_Nanoseconds times
     }
     const varjo_Nanoseconds unix_ns = varjo_ConvertToUnixTime(session, timestamp);
     return static_cast<int64_t>(unix_ns / 1000);
-}
-
-void writeMatrixCsv(std::ostream& os, const varjo_Matrix& matrix)
-{
-    for (int i = 0; i < 16; ++i) {
-        if (i != 0) {
-            os << ',';
-        }
-        os << matrix.value[i];
-    }
 }
 
 } // namespace
@@ -278,12 +271,11 @@ void VarjoIMUService::writeRow(const VarjoIMUData& data)
         << data.frame_number << ","
         << data.frame_display_time << ","
         << data.frame_display_time_unix_us << ","
-        << data.position.x << "," << data.position.y << "," << data.position.z << ","
-        << data.euler_deg.x << "," << data.euler_deg.y << "," << data.euler_deg.z << ","
-        << data.angular_velocity.x << "," << data.angular_velocity.y << "," << data.angular_velocity.z << ",";
-
-    writeMatrixCsv(logfile_, data.pose);
-    logfile_ << "\n";
+        << VarjoToolkit::Csv::toCsv(data.position) << ","
+        << VarjoToolkit::Csv::toCsv(data.euler_deg) << ","
+        << VarjoToolkit::Csv::toCsv(data.angular_velocity) << ","
+        << VarjoToolkit::Csv::toCsv(data.pose)
+        << "\n";
 }
 
 VarjoIMUService::VarjoIMUData VarjoIMUService::sampleOnce()
@@ -293,10 +285,10 @@ VarjoIMUService::VarjoIMUData VarjoIMUService::sampleOnce()
         return data;
     }
 
-    varjo_FrameInfo* frame_info = varjo_CreateFrameInfo(session_.get());
+    VarjoFrameInfo frame_info(session_);
     if (!frame_info) {
         std::lock_guard<std::mutex> lock(state_mutex_);
-        last_error_ = L"varjo_CreateFrameInfo returned null";
+        last_error_ = L"VarjoFrameInfo failed to create varjo_FrameInfo";
         return data;
     }
 
@@ -305,14 +297,18 @@ VarjoIMUService::VarjoIMUData VarjoIMUService::sampleOnce()
     data.varjo_now = varjo_GetCurrentTime(session_.get());
     data.varjo_now_unix_us = convertVarjoTimeToUnixUs(session_.get(), data.varjo_now);
 
-    varjo_WaitSync(session_.get(), frame_info);
+    if (!frame_info.waitSync()) {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        last_error_ = L"VarjoFrameInfo::waitSync failed";
+        return data;
+    }
 
-    data.frame_number = frame_info->frameNumber;
-    data.frame_display_time = frame_info->displayTime;
+    data.frame_number = frame_info.frameNumber();
+    data.frame_display_time = frame_info.displayTime();
     data.frame_display_time_unix_us = convertVarjoTimeToUnixUs(session_.get(), data.frame_display_time);
-    data.frame_info = *frame_info;
-
-    varjo_FreeFrameInfo(frame_info);
+    if (frame_info.get()) {
+        data.frame_info = *frame_info.get();
+    }
 
     data.pose = varjo_FrameGetPose(session_.get(), varjo_PoseType_Center);
     data.position = varjo_GetPosition(&data.pose);
