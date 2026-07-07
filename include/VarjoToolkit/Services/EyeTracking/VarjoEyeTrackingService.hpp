@@ -17,8 +17,6 @@
 
 #include <Varjo.h>
 
-#include <boost/circular_buffer.hpp>
-
 struct VarjoProjectedGazePosition {
     varjo_Vector2Df leftEye;
     varjo_Vector2Df rightEye;
@@ -44,7 +42,7 @@ struct VarjoEyeTrackingData {
     VarjoProjectedGazePosition gazePos_toVideo;                                     // 通常Gazeから計算した2D動画向けの視線位置
     std::optional<VarjoProjectedGazePosition> renderingGazePos_toVideo;             // renderingGazeから計算した2D動画向けの視線位置
     VarjoProjectedGazePosition gazePos_toVarjoDisplay;                              // 通常Gazeから計算したVarjoディスプレイ向けの視線位置
-	std::optional<VarjoProjectedGazePosition> renderingGazePos_toVarjoDisplay;      // renderingGazeから計算したVarjoディスプレイ向けの視線位置
+ 	std::optional<VarjoProjectedGazePosition> renderingGazePos_toVarjoDisplay;      // renderingGazeから計算したVarjoディスプレイ向けの視線位置
     FrameInfo frameInfo;                                                            // 視線を取得した時のフレーム情報
     std::optional<FrameInfo> renderingGazeFrameInfo;                                // renderingGazeに対応するフレーム情報
 };
@@ -109,7 +107,7 @@ public:
 
     std::optional<varjo_Gaze> getRenderingGaze() const;
 
-	std::vector<VarjoEyeTrackingData> getEyeTrackingData();
+ 	std::vector<VarjoEyeTrackingData> getEyeTrackingData();
 
 private:
     VarjoProjectedGazePosition calcProjectedGazePositionToVarjoDisplay(
@@ -135,7 +133,8 @@ private:
     const std::shared_ptr<varjo_Session> session_;
     const int viewCount_;
 
-    boost::circular_buffer<FrameInfo> frameInfos_;
+    std::deque<FrameInfo> frameInfos_;
+    const size_t frameInfoCapacity_ = 512;
     std::mutex frameInfoMtx_;
     std::thread getFrameInfoWorker_;
     std::atomic_bool workerStopSignal_{false};
@@ -217,4 +216,3 @@ private:
     const int acquireFrequencyMs_;
     std::atomic_bool threadEndSignal_{false};
 };
-
