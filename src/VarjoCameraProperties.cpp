@@ -610,8 +610,7 @@ bool VarjoCameraProperties::setModeUnlocked(varjo_CameraPropertyType type, varjo
     }
 
     varjo_MRSetCameraPropertyMode(session_, type, mode);
-    update(type);
-    return true;
+    return update(type);
 }
 
 bool VarjoCameraProperties::setValueUnlocked(varjo_CameraPropertyType type, const varjo_CameraPropertyValue& value)
@@ -623,8 +622,7 @@ bool VarjoCameraProperties::setValueUnlocked(varjo_CameraPropertyType type, cons
     }
 
     varjo_MRSetCameraPropertyValue(session_, type, &value);
-    update(type);
-    return true;
+    return update(type);
 }
 
 int VarjoCameraProperties::findModeIndex(varjo_CameraPropertyMode mode, const std::vector<varjo_CameraPropertyMode>& modes) const
