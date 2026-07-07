@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Added
+
+- `VarjoEventService`
+  - Polls `VarjoEventQueue` in a worker thread.
+  - Writes event rows to CSV with row index, readable event type name, and `varjo_Event` payload fields.
+  - Provides a bounded in-memory queue for application-side event consumption.
+- `VarjoMarkerTrackingService`
+  - Samples `VarjoMarkerTracker` in a worker thread.
+  - Writes marker object/component/pose rows to CSV.
+  - Provides a bounded in-memory queue for application-side marker consumption.
+- `VarjoToolkitEventMarkerServicesTest`
+  - HMD-independent tests for event/marker CSV row formatting, file output, and null-session service failure paths.
+- `ServiceLoggerSample` integration for event and marker logging.
+  - Added `--no-event` and `--no-marker` options.
+
 ### Changed
 
 - Removed the core Boost dependency by replacing the eye tracking frame history `boost::circular_buffer` usage with `std::deque`-based bounded history logic.
