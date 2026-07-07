@@ -78,6 +78,7 @@ endif()
 add_library(VarjoToolkit STATIC
     src/VarjoSession.cpp
     src/VarjoFrameInfo.cpp
+    src/VarjoCsv.cpp
     src/VarjoEyeTrackingService.cpp
     src/VarjoIMUService.cpp
     src/VarjoVSTService.cpp
@@ -131,17 +132,29 @@ if (VARJOTOOLKIT_BUILD_TESTS)
             VarjoToolkit::VarjoToolkit
     )
 
-    target_compile_definitions(VarjoToolkitCoreSmokeTest
-        PRIVATE
-            NOMINMAX
-            WIN32_LEAN_AND_MEAN
+    add_executable(VarjoToolkitCsvUtilityTest
+        tests/CsvUtilityTest.cpp
     )
 
-    if (MSVC)
-        target_compile_options(VarjoToolkitCoreSmokeTest PRIVATE /utf-8 /W4 /permissive-)
-    else()
-        target_compile_options(VarjoToolkitCoreSmokeTest PRIVATE -Wall -Wextra -Wpedantic)
-    endif()
+    target_link_libraries(VarjoToolkitCsvUtilityTest
+        PRIVATE
+            VarjoToolkit::VarjoToolkit
+    )
+
+    foreach(_varjotoolkit_test_target IN ITEMS VarjoToolkitCoreSmokeTest VarjoToolkitCsvUtilityTest)
+        target_compile_definitions(${_varjotoolkit_test_target}
+            PRIVATE
+                NOMINMAX
+                WIN32_LEAN_AND_MEAN
+        )
+
+        if (MSVC)
+            target_compile_options(${_varjotoolkit_test_target} PRIVATE /utf-8 /W4 /permissive-)
+        else()
+            target_compile_options(${_varjotoolkit_test_target} PRIVATE -Wall -Wextra -Wpedantic)
+        endif()
+    endforeach()
 
     add_test(NAME VarjoToolkitCoreSmokeTest COMMAND VarjoToolkitCoreSmokeTest)
+    add_test(NAME VarjoToolkitCsvUtilityTest COMMAND VarjoToolkitCsvUtilityTest)
 endif()
