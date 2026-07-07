@@ -1,0 +1,105 @@
+# Build outputs
+out/
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+install_manifest.txt
+_compile_commands.json
+compile_commands.json
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.VC.opendb
+*.opensdf
+*.sdf
+ipch/
+Debug/
+Release/
+x64/
+x86/
+Win32/
+ARM/
+ARM64/
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio generated files
+*.ilk
+*.pdb
+*.idb
+*.iobj
+*.ipdb
+*.tlog
+*.lastbuildstate
+*.log
+*.recipe
+*.vcxproj.user
+*.filters.user
+
+# CMake generated Visual Studio files when generated in source tree
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+ZERO_CHECK.*
+ALL_BUILD.*
+INSTALL.*
+
+# Executables / libraries
+*.exe
+*.dll
+*.lib
+*.exp
+*.obj
+*.o
+*.a
+*.so
+*.dylib
+
+# VarjoToolkit sample outputs
+varjo_service_logs/
+*_service_logs/
+
+# Captured videos / raw data / metadata logs
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.raw
+*.csv
+
+# Keep documentation CSV files if explicitly added under docs
+!docs/**/*.csv
+
+# Local SDK / dependency folders
+external/
+third_party/
+vcpkg_installed/
+
+# Local environment files
+.env
+*.local
+*.ini
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Python helper scripts / temporary analysis outputs
+__pycache__/
+*.py[cod]
+*.ipynb_checkpoints/
