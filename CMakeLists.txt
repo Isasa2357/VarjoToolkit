@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.20)
 
 project(VarjoToolkit VERSION 0.1.0 LANGUAGES CXX)
 
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
 option(VARJOTOOLKIT_BUILD_SAMPLES "Build VarjoToolkit sample applications" ON)
 option(VARJOTOOLKIT_BUILD_TESTS "Build VarjoToolkit tests. Some tests require a connected Varjo HMD/runtime." OFF)
 option(VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS "Build experimental Varjo video post process shader wrapper" ON)
@@ -136,9 +139,15 @@ add_library(VarjoToolkit::VarjoToolkit ALIAS VarjoToolkit)
 # Compatibility alias for older sample/application CMakeLists.
 add_library(VarjoServices ALIAS VarjoToolkit)
 
+set_target_properties(VarjoToolkit PROPERTIES
+    VERSION ${PROJECT_VERSION}
+    EXPORT_NAME VarjoToolkit
+)
+
 target_include_directories(VarjoToolkit
     PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
         "${VARJO_INCLUDE_DIR}"
 )
 
@@ -175,6 +184,42 @@ if (MSVC)
 else()
     target_compile_options(VarjoToolkit PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+
+install(TARGETS VarjoToolkit
+    EXPORT VarjoToolkitTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(DIRECTORY include/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+install(EXPORT VarjoToolkitTargets
+    FILE VarjoToolkitTargets.cmake
+    NAMESPACE VarjoToolkit::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/VarjoToolkit
+)
+
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/VarjoToolkitConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/VarjoToolkitConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/VarjoToolkit
+)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/VarjoToolkitConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/VarjoToolkitConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/VarjoToolkitConfigVersion.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/VarjoToolkit
+)
 
 if (VARJOTOOLKIT_BUILD_SAMPLES)
     add_subdirectory(samples/ServiceLoggerSample)
