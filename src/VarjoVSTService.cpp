@@ -12,6 +12,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <deque>
 #include <iomanip>
 #include <sstream>
 #include <stdexcept>
@@ -53,7 +54,7 @@ VarjoVSTService::VarjoVSTService(
     , timestamp_mapping_(session)
     , output_directory_(output_directory)
     , base_filename_(base_filename)
-    , queue_capacity_((queue_capacity > 0) ? queue_capacity : 1)
+    , frame_queue_(queue_capacity)
 {
     left_video_path_ = output_directory_ / (base_filename_ + L"_vst_left.mp4");
     right_video_path_ = output_directory_ / (base_filename_ + L"_vst_right.mp4");
@@ -84,10 +85,7 @@ bool VarjoVSTService::start()
         return false;
     }
 
-    {
-        std::lock_guard<std::mutex> lock(frame_queue_mutex_);
-        frame_queue_.clear();
-    }
+    frame_queue_.clear();
 
     {
         std::lock_guard<std::mutex> lock(state_mutex_);
@@ -108,7 +106,7 @@ bool VarjoVSTService::start()
         })) {
         setLastError(L"failed to start VST data stream");
         stop_requested_.store(true);
-        frame_queue_cv_.notify_all();
+        frame_queue_.notifyAll();
         if (writer_thread_.joinable()) {
             writer_thread_.join();
         }
@@ -126,7 +124,7 @@ void VarjoVSTService::stop()
     data_stream_.stop();
 
     stop_requested_.store(true);
-    frame_queue_cv_.notify_all();
+    frame_queue_.notifyAll();
 
     if (writer_thread_.joinable()) {
         writer_thread_.join();
@@ -340,16 +338,11 @@ void VarjoVSTService::captureChannel(
 
 void VarjoVSTService::pushCapturedFrame(CapturedFrame&& frame)
 {
-    {
-        std::lock_guard<std::mutex> lock(frame_queue_mutex_);
-        frame_queue_.push_back(std::move(frame));
-        while (frame_queue_.size() > queue_capacity_) {
-            frame_queue_.pop_front();
-            std::lock_guard<std::mutex> state_lock(state_mutex_);
-            ++dropped_frame_count_;
-        }
+    const size_t dropped = frame_queue_.push(std::move(frame));
+    if (dropped > 0) {
+        std::lock_guard<std::mutex> state_lock(state_mutex_);
+        dropped_frame_count_ += dropped;
     }
-    frame_queue_cv_.notify_one();
 }
 
 void VarjoVSTService::writerMain()
@@ -358,13 +351,9 @@ void VarjoVSTService::writerMain()
 
     std::deque<CapturedFrame> local_queue;
     while (!stop_requested_.load()) {
-        {
-            std::unique_lock<std::mutex> lock(frame_queue_mutex_);
-            frame_queue_cv_.wait(lock, [&]() {
-                return stop_requested_.load() || !frame_queue_.empty();
-            });
-            local_queue.swap(frame_queue_);
-        }
+        frame_queue_.waitSwap(local_queue, [&]() {
+            return stop_requested_.load();
+        });
 
         while (!local_queue.empty()) {
             writeFrame(local_queue.front());
@@ -372,10 +361,7 @@ void VarjoVSTService::writerMain()
         }
     }
 
-    {
-        std::lock_guard<std::mutex> lock(frame_queue_mutex_);
-        local_queue.swap(frame_queue_);
-    }
+    frame_queue_.drain(local_queue);
     while (!local_queue.empty()) {
         writeFrame(local_queue.front());
         local_queue.pop_front();
