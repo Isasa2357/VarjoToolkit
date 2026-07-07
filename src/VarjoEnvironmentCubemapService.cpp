@@ -7,6 +7,9 @@
 
 #include <VarjoToolkit/Services/Cubemap/VarjoEnvironmentCubemapService.hpp>
 
+#include <VarjoToolkit/DataStream/VarjoDataStreamBufferLock.hpp>
+#include <VarjoToolkit/Utilities/VarjoCsv.hpp>
+
 #include <Windows.h>
 
 #include <algorithm>
@@ -39,36 +42,6 @@ std::string formatSystemClockUtcIso8601(std::chrono::system_clock::time_point tp
     return oss.str();
 }
 
-void writeMatrix3x3Csv(std::ostream& os, const varjo_Matrix3x3& matrix)
-{
-    for (int i = 0; i < 9; ++i) {
-        if (i != 0) {
-            os << ',';
-        }
-        os << matrix.value[i];
-    }
-}
-
-void writeMatrixCsv(std::ostream& os, const varjo_Matrix& matrix)
-{
-    for (int i = 0; i < 16; ++i) {
-        if (i != 0) {
-            os << ',';
-        }
-        os << matrix.value[i];
-    }
-}
-
-int64_t streamConfigScore(const varjo_StreamConfig& cfg)
-{
-    int64_t score = static_cast<int64_t>(cfg.frameRate) * 1000000000LL +
-        static_cast<int64_t>(cfg.width) * static_cast<int64_t>(cfg.height);
-    if (cfg.format == varjo_TextureFormat_RGBA16_FLOAT) {
-        score += 1000000000000000LL;
-    }
-    return score;
-}
-
 } // namespace
 
 VarjoEnvironmentCubemapService::VarjoEnvironmentCubemapService(
@@ -77,6 +50,7 @@ VarjoEnvironmentCubemapService::VarjoEnvironmentCubemapService(
     const std::wstring& base_filename,
     size_t queue_capacity)
     : session_(session)
+    , data_stream_(session)
     , output_directory_(output_directory)
     , base_filename_(base_filename)
     , queue_capacity_((queue_capacity > 0) ? queue_capacity : 1)
@@ -126,23 +100,27 @@ bool VarjoEnvironmentCubemapService::start()
     writer_thread_ = std::thread(&VarjoEnvironmentCubemapService::writerMain, this);
     SetThreadPriority(static_cast<HANDLE>(writer_thread_.native_handle()), THREAD_PRIORITY_BELOW_NORMAL);
 
-    varjo_StartDataStream(
-        session_.get(),
-        stream_id_,
-        channel_flags_,
-        &VarjoEnvironmentCubemapService::onFrameReceivedStatic,
-        this);
+    if (!data_stream_.start(stream_config_, channel_flags_, [this](const varjo_StreamFrame* frame, varjo_Session* callback_session) {
+            this->onFrameReceived(frame, callback_session);
+        })) {
+        setLastError(L"failed to start EnvironmentCubemap data stream");
+        stop_requested_.store(true);
+        frame_queue_cv_.notify_all();
+        if (writer_thread_.joinable()) {
+            writer_thread_.join();
+        }
+        closeOutputs();
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        running_ = false;
+        return false;
+    }
 
-    stream_started_.store(true);
     return true;
 }
 
 void VarjoEnvironmentCubemapService::stop()
 {
-    if (stream_started_.load() && session_ && stream_id_ != varjo_InvalidId) {
-        varjo_StopDataStream(session_.get(), stream_id_);
-        stream_started_.store(false);
-    }
+    data_stream_.stop();
 
     stop_requested_.store(true);
     frame_queue_cv_.notify_all();
@@ -197,46 +175,20 @@ uint64_t VarjoEnvironmentCubemapService::writeFailureCount() const
 
 bool VarjoEnvironmentCubemapService::selectStreamConfig()
 {
-    const int32_t config_count = varjo_GetDataStreamConfigCount(session_.get());
-    if (config_count <= 0) {
-        setLastError(L"varjo_GetDataStreamConfigCount returned no configs");
-        return false;
-    }
+    VarjoDataStream::ConfigRequest request{};
+    request.streamType = varjo_StreamType_EnvironmentCubemap;
+    request.bufferType = varjo_BufferType_CPU;
+    request.requiredChannels = varjo_ChannelFlag_First;
+    request.requireAllRequiredChannels = false;
 
-    std::vector<varjo_StreamConfig> configs(static_cast<size_t>(config_count));
-    varjo_GetDataStreamConfigs(session_.get(), configs.data(), config_count);
-
-    bool found = false;
-    int64_t best_score = -1;
-    varjo_StreamConfig best{};
-
-    for (const auto& cfg : configs) {
-        if (cfg.streamType != varjo_StreamType_EnvironmentCubemap) {
-            continue;
-        }
-        if (cfg.bufferType != varjo_BufferType_CPU) {
-            continue;
-        }
-        if (cfg.channelFlags == varjo_ChannelFlag_None) {
-            continue;
-        }
-
-        const int64_t score = streamConfigScore(cfg);
-        if (!found || score > best_score) {
-            found = true;
-            best_score = score;
-            best = cfg;
-        }
-    }
-
-    if (!found) {
+    auto best = data_stream_.findBestConfig(request);
+    if (!best.has_value()) {
         setLastError(L"No CPU EnvironmentCubemap data stream with buffer was found");
         return false;
     }
 
-    stream_config_ = best;
-    stream_id_ = best.streamId;
-    channel_flags_ = best.channelFlags;
+    stream_config_ = best.value();
+    channel_flags_ = (best.value().channelFlags != varjo_ChannelFlag_None) ? best.value().channelFlags : varjo_ChannelFlag_First;
     return true;
 }
 
@@ -273,18 +225,6 @@ void VarjoEnvironmentCubemapService::closeOutputs()
     }
 }
 
-void VarjoEnvironmentCubemapService::onFrameReceivedStatic(
-    const varjo_StreamFrame* frame,
-    varjo_Session* session,
-    void* user_data)
-{
-    auto* self = static_cast<VarjoEnvironmentCubemapService*>(user_data);
-    if (!self) {
-        return;
-    }
-    self->onFrameReceived(frame, session);
-}
-
 void VarjoEnvironmentCubemapService::onFrameReceived(const varjo_StreamFrame* frame, varjo_Session* callback_session)
 {
     if (!frame || !callback_session || stop_requested_.load()) {
@@ -319,18 +259,19 @@ void VarjoEnvironmentCubemapService::captureFrame(
     captured.stream_frame = frame;
     captured.channel_index = channel_index;
 
-    varjo_LockDataStreamBuffer(callback_session, buffer_id);
-    captured.buffer_metadata = varjo_GetBufferMetadata(callback_session, buffer_id);
+    VarjoDataStreamBufferLock buffer_lock(callback_session, buffer_id);
+    if (!buffer_lock) {
+        return;
+    }
 
+    captured.buffer_metadata = buffer_lock.metadata();
     if (captured.buffer_metadata.type == varjo_BufferType_CPU && captured.buffer_metadata.byteSize > 0) {
-        const auto* src = static_cast<const uint8_t*>(varjo_GetBufferCPUData(callback_session, buffer_id));
+        const auto* src = static_cast<const uint8_t*>(buffer_lock.cpuData());
         if (src) {
             captured.raw_with_padding.resize(static_cast<size_t>(captured.buffer_metadata.byteSize));
             std::memcpy(captured.raw_with_padding.data(), src, captured.raw_with_padding.size());
         }
     }
-
-    varjo_UnlockDataStreamBuffer(callback_session, buffer_id);
 
     if (!captured.raw_with_padding.empty()) {
         pushCapturedFrame(std::move(captured));
@@ -476,23 +417,12 @@ void VarjoEnvironmentCubemapService::writeMetadataRow(
         << cm.brightnessNormalizationGain << ','
         << cm.wbNormalizationData.whiteBalanceColorGains[0] << ','
         << cm.wbNormalizationData.whiteBalanceColorGains[1] << ','
-        << cm.wbNormalizationData.whiteBalanceColorGains[2] << ',';
-
-    writeMatrix3x3Csv(ofs, cm.wbNormalizationData.invCCM);
-    ofs << ',';
-    writeMatrix3x3Csv(ofs, cm.wbNormalizationData.ccm);
-
-    ofs
-        << ',' << frame.buffer_metadata.format
-        << ',' << frame.buffer_metadata.type
-        << ',' << frame.buffer_metadata.byteSize
-        << ',' << frame.buffer_metadata.rowStride
-        << ',' << frame.buffer_metadata.width
-        << ',' << frame.buffer_metadata.height
-        << ',';
-
-    writeMatrixCsv(ofs, sf.hmdPose);
-    ofs << '\n';
+        << cm.wbNormalizationData.whiteBalanceColorGains[2] << ','
+        << VarjoToolkit::Csv::toCsv(cm.wbNormalizationData.invCCM) << ','
+        << VarjoToolkit::Csv::toCsv(cm.wbNormalizationData.ccm) << ','
+        << VarjoToolkit::Csv::toCsv(frame.buffer_metadata) << ','
+        << VarjoToolkit::Csv::toCsv(sf.hmdPose)
+        << '\n';
 }
 
 int64_t VarjoEnvironmentCubemapService::convertVarjoTimeToUnixUs(varjo_Nanoseconds timestamp) const
