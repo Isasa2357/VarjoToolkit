@@ -78,10 +78,12 @@ endif()
 add_library(VarjoToolkit STATIC
     src/VarjoSession.cpp
     src/VarjoFrameInfo.cpp
+    src/VarjoScopedLock.cpp
     src/VarjoCsv.cpp
     src/VarjoDataStream.cpp
     src/VarjoDataStreamBufferLock.cpp
     src/VarjoCameraProperties.cpp
+    src/VarjoChromaKey.cpp
     src/VarjoEyeTrackingService.cpp
     src/VarjoIMUService.cpp
     src/VarjoVSTService.cpp
@@ -162,7 +164,16 @@ if (VARJOTOOLKIT_BUILD_TESTS)
             VarjoToolkit::VarjoToolkit
     )
 
-    foreach(_varjotoolkit_test_target IN ITEMS VarjoToolkitCoreSmokeTest VarjoToolkitCsvUtilityTest VarjoToolkitDataStreamWrappersTest VarjoToolkitCameraPropertiesTest)
+    add_executable(VarjoToolkitScopedLockChromaKeyTest
+        tests/ScopedLockChromaKeyTest.cpp
+    )
+
+    target_link_libraries(VarjoToolkitScopedLockChromaKeyTest
+        PRIVATE
+            VarjoToolkit::VarjoToolkit
+    )
+
+    foreach(_varjotoolkit_test_target IN ITEMS VarjoToolkitCoreSmokeTest VarjoToolkitCsvUtilityTest VarjoToolkitDataStreamWrappersTest VarjoToolkitCameraPropertiesTest VarjoToolkitScopedLockChromaKeyTest)
         target_compile_definitions(${_varjotoolkit_test_target}
             PRIVATE
                 NOMINMAX
@@ -180,4 +191,5 @@ if (VARJOTOOLKIT_BUILD_TESTS)
     add_test(NAME VarjoToolkitCsvUtilityTest COMMAND VarjoToolkitCsvUtilityTest)
     add_test(NAME VarjoToolkitDataStreamWrappersTest COMMAND VarjoToolkitDataStreamWrappersTest)
     add_test(NAME VarjoToolkitCameraPropertiesTest COMMAND VarjoToolkitCameraPropertiesTest)
+    add_test(NAME VarjoToolkitScopedLockChromaKeyTest COMMAND VarjoToolkitScopedLockChromaKeyTest)
 endif()
