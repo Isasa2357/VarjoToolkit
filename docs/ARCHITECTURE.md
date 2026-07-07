@@ -4,7 +4,7 @@
 
 VarjoToolkit is a thin C++ wrapper layer around Varjo Native SDK.
 
-The library is intended to provide a stable entry point for Varjo sessions, frame information, data streams, mixed reality controls, world/marker tracking, and layer/swapchain submission helpers. Application-specific rendering, camera, computer vision, machine learning, or UI pipelines should live outside this library.
+The library is intended to provide a stable entry point for Varjo sessions, frame information, data streams, mixed reality controls, world/marker tracking, video post process shader configuration, and layer/swapchain submission helpers. Application-specific rendering, camera, computer vision, machine learning, or UI pipelines should live outside this library.
 
 ## Dependency policy
 
@@ -42,9 +42,27 @@ DirectX itself is allowed at the Varjo Native SDK boundary.
 
 For example, `VarjoSwapChain` may accept native Direct3D objects such as `ID3D11Device*` or `ID3D12CommandQueue*` because those are part of the Varjo swapchain creation API surface.
 
+The experimental video post process shader wrapper may also accept native Direct3D objects because Varjo Native SDK exposes `varjo_MRD3D11ConfigureShader` and `varjo_MRD3D12ConfigureShader` directly.
+
 However, VarjoToolkit should not own a high-level Direct3D backend. If minimal Direct3D code is required in the core library, write it directly against the Windows / DirectX SDK. Do not depend on D3DHelper.
 
 Applications may use D3DHelper and VarjoToolkit together. VarjoToolkit should therefore accept native Direct3D resources and objects supplied by the caller rather than forcing a particular helper framework.
+
+## Video post process shader policy
+
+Varjo Native SDK's video post process shader API is allowed in VarjoToolkit because it is a Native SDK feature for VST / video pass-through processing, not an application-layer fullscreen effect.
+
+The core wrapper should remain thin:
+
+- Accept compiled shader bytecode as `const void* + size`.
+- Do not compile HLSL source.
+- Accept constant buffer data as raw bytes.
+- Do not interpret user-defined constant buffer structs.
+- Provide template helpers only to pass trivially copyable structs as bytes.
+- Hold `varjo_LockType_VideoPostProcessShader` through RAII.
+- Wrap shader input texture acquire/release through RAII.
+
+The core wrapper must not contain effect-specific shaders such as blur, circular dimming, gaze highlight, color grading, segmentation compositing, or parameter UI. Those belong in applications, samples, or a future optional effects library.
 
 ## Sample policy
 
@@ -55,6 +73,7 @@ Examples:
 - A D3D11 or D3D12 sample may use D3DHelper if the sample is explicitly demonstrating integration, but the core library must not require it.
 - A JSON configuration file may be parsed in a sample, but JSON should not become a core dependency unless necessary.
 - OpenCV-based image processing should be outside VarjoToolkit core. If demonstrated, it should be in a separate sample/application layer.
+- Video post process samples may include HLSL files and shader compilation steps, but the core library should accept only compiled shader bytecode.
 
 ## Design guideline
 
@@ -63,5 +82,7 @@ Prefer APIs that accept native resources from the caller:
 - `varjo_Session*` or `std::shared_ptr<varjo_Session>`
 - native Direct3D device/queue/resource pointers
 - Varjo Native SDK structs
+- compiled shader bytecode views
+- raw byte views for constant buffers
 
-Avoid APIs that own or hide large application subsystems such as a complete renderer, camera pipeline, image processing pipeline, or ML inference pipeline.
+Avoid APIs that own or hide large application subsystems such as a complete renderer, camera pipeline, image processing pipeline, shader build pipeline, or ML inference pipeline.
