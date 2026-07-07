@@ -14,6 +14,13 @@ VarjoToolkit は、Varjo Native SDK を使う C++ アプリケーションから
   - `varjo_Session*`、`std::shared_ptr<varjo_Session>`、`VarjoSession` から構築可能
   - `std::shared_ptr<varjo_Session>` または `VarjoSession` から構築した場合は session ownership を保持
   - 保存やキュー投入に使える `VarjoFrameInfoSnapshot` を提供
+- `VarjoDataStream`
+  - `varjo_GetDataStreamConfigs` / `varjo_StartDataStream` / `varjo_StopDataStream` の wrapper
+  - stream config の列挙、条件指定による best config 選択、callback dispatch を提供
+  - `varjo_Session*`、`std::shared_ptr<varjo_Session>`、`VarjoSession` から構築可能
+- `VarjoDataStreamBufferLock`
+  - `varjo_LockDataStreamBuffer` / `varjo_UnlockDataStreamBuffer` の RAII wrapper
+  - DataStream callback 内の buffer lock/unlock 漏れを防止
 - `VarjoToolkit::Csv`
   - Varjo Native SDK 型や VarjoToolkit 型を CSV 行文字列へ変換
   - 型に対応した CSV ヘッダ文字列を生成
@@ -48,6 +55,7 @@ VarjoToolkit/
   include/
     VarjoToolkit/
       Core/
+      DataStream/
       Services/
         EyeTracking/
         IMU/
@@ -83,8 +91,6 @@ VarjoToolkit/
 
 `VARJO_SDK_ROOT` には Varjo Native SDK のルートディレクトリを指定してください。
 
-例:
-
 ```bat
 set "VARJO_SDK_ROOT=C:\Program Files\Varjo\Varjo Native SDK"
 
@@ -98,6 +104,50 @@ cmake --build out\build\default --config Release
 ```
 
 Boost が自動検出できない場合は、CMake の include search path から見える場所に Boost headers を置くか、CMake 側の探索設定を追加してください。
+
+## DataStream wrapper
+
+`VarjoDataStream` は、stream config の列挙、条件指定による config 選択、start/stop、callback dispatch をまとめた低レイヤ wrapper です。
+
+```cpp
+#include <VarjoToolkit/DataStream/VarjoDataStream.hpp>
+#include <VarjoToolkit/DataStream/VarjoDataStreamBufferLock.hpp>
+
+VarjoDataStream stream(session);
+
+VarjoDataStream::ConfigRequest request{};
+request.streamType = varjo_StreamType_DistortedColor;
+request.format = varjo_TextureFormat_NV12;
+request.bufferType = varjo_BufferType_CPU;
+request.requiredChannels = static_cast<varjo_ChannelFlag>(
+    static_cast<int64_t>(varjo_ChannelFlag_Left) |
+    static_cast<int64_t>(varjo_ChannelFlag_Right));
+
+stream.startBest(request, [] (const varjo_StreamFrame* frame, varjo_Session* callbackSession) {
+    if (!frame) {
+        return;
+    }
+
+    const varjo_BufferId bufferId = varjo_GetBufferId(
+        callbackSession,
+        frame->id,
+        frame->frameNumber,
+        varjo_ChannelIndex_Left);
+
+    VarjoDataStreamBufferLock lock(callbackSession, bufferId);
+    if (!lock) {
+        return;
+    }
+
+    const varjo_BufferMetadata metadata = lock.metadata();
+    const void* cpuData = lock.cpuData();
+
+    // metadata / cpuData をここでコピーする。
+    // unlock は VarjoDataStreamBufferLock の destructor で自動実行される。
+});
+```
+
+`VarjoDataStream` は move 禁止です。`varjo_StartDataStream` に渡す callback user_data がオブジェクトのアドレスを保持するため、stream 開始後にオブジェクトを移動できない設計にしています。
 
 ## CSV ユーティリティ
 
@@ -156,6 +206,8 @@ std::string row = VarjoToolkit::Csv::join({
 `VarjoToolkitCoreSmokeTest` は、Varjo Base が起動しており、Varjo HMD が接続されている前提の smoke test です。`VarjoSession` の初期化、`VarjoFrameInfo` の作成、`varjo_WaitSync`、snapshot 取得、`std::shared_ptr<varjo_Session>` 互換、move ownership を確認します。
 
 `VarjoToolkitCsvUtilityTest` は CSV 文字列生成の HMD 不要テストです。Varjo SDK のヘッダとライブラリは必要ですが、Varjo runtime 起動や HMD 接続は不要です。
+
+`VarjoToolkitDataStreamWrappersTest` は DataStream wrapper の HMD 不要テストです。config match / scoring、null session start failure、invalid buffer lock を確認します。
 
 ```bat
 set "VARJO_SDK_ROOT=C:\Program Files\Varjo\Varjo Native SDK"
@@ -243,6 +295,8 @@ target_link_libraries(YourApp
 - `VarjoFrameInfo` は `varjo_FrameInfo*` を所有します。長期保存や queue には `VarjoFrameInfoSnapshot` を使ってください。
 - `VarjoFrameInfo` は `std::shared_ptr<varjo_Session>` から構築した場合、その shared ownership を保持します。既存サービスが持つ session handle と安全に併用できます。
 - `varjo_Session*` から構築した `VarjoFrameInfo` は session を所有しません。呼び出し側が session lifetime を保証してください。
+- `VarjoDataStream` は copy/move 禁止です。stream を開始した object の lifetime を stop 後まで維持してください。
+- `VarjoDataStreamBufferLock` は DataStream callback 内で buffer をロックし、destructor で自動 unlock します。CPU data は callback 内で必要な分をコピーしてください。
 - CSV ユーティリティは値のエスケープを行いません。現在の対象は数値・bool・列挙値など、カンマを含まない値です。
 - `VarjoEyeTrackingService` は `varjo_WaitSync` で取得した frame info を内部バッファに保持し、gaze の `captureTime` に対応する frame info を使って座標変換します。
 - `VarjoIMUService` も `varjo_WaitSync` を使用します。レンダリングやカメラ処理への影響を抑えるため、worker thread は低優先度で動作します。
