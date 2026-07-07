@@ -301,7 +301,10 @@ VarjoShaderTextureLock VarjoVideoPostProcessShader::acquireTexture(int32_t textu
         setLastError("video post process shader is not locked");
         return lock;
     }
-    return VarjoShaderTextureLock(session_owner_ ? session_owner_ : std::shared_ptr<varjo_Session>{}, varjo_ShaderType_VideoPostProcess, textureIndex);
+    if (session_owner_) {
+        return VarjoShaderTextureLock(session_owner_, varjo_ShaderType_VideoPostProcess, textureIndex);
+    }
+    return VarjoShaderTextureLock(session_, varjo_ShaderType_VideoPostProcess, textureIndex);
 }
 
 bool VarjoVideoPostProcessShader::submitInputs(
