@@ -11,8 +11,17 @@ VarjoFrameInfo::VarjoFrameInfo(varjo_Session* session)
     }
 }
 
+VarjoFrameInfo::VarjoFrameInfo(std::shared_ptr<varjo_Session> session)
+    : session_owner_(std::move(session))
+    , session_(session_owner_.get())
+{
+    if (session_) {
+        frame_info_ = varjo_CreateFrameInfo(session_);
+    }
+}
+
 VarjoFrameInfo::VarjoFrameInfo(const VarjoSession& session)
-    : VarjoFrameInfo(session.get())
+    : VarjoFrameInfo(session.shared())
 {}
 
 VarjoFrameInfo::~VarjoFrameInfo()
@@ -21,7 +30,8 @@ VarjoFrameInfo::~VarjoFrameInfo()
 }
 
 VarjoFrameInfo::VarjoFrameInfo(VarjoFrameInfo&& other) noexcept
-    : session_(std::exchange(other.session_, nullptr))
+    : session_owner_(std::move(other.session_owner_))
+    , session_(std::exchange(other.session_, nullptr))
     , frame_info_(std::exchange(other.frame_info_, nullptr))
 {}
 
@@ -29,6 +39,7 @@ VarjoFrameInfo& VarjoFrameInfo::operator=(VarjoFrameInfo&& other) noexcept
 {
     if (this != &other) {
         release();
+        session_owner_ = std::move(other.session_owner_);
         session_ = std::exchange(other.session_, nullptr);
         frame_info_ = std::exchange(other.frame_info_, nullptr);
     }
@@ -48,6 +59,21 @@ bool VarjoFrameInfo::waitSync()
 
     varjo_WaitSync(session_, frame_info_);
     return true;
+}
+
+varjo_Session* VarjoFrameInfo::session() const
+{
+    return session_;
+}
+
+std::shared_ptr<varjo_Session> VarjoFrameInfo::sharedSession() const
+{
+    return session_owner_;
+}
+
+bool VarjoFrameInfo::ownsSession() const
+{
+    return static_cast<bool>(session_owner_);
 }
 
 varjo_FrameInfo* VarjoFrameInfo::get()
@@ -124,4 +150,5 @@ void VarjoFrameInfo::release()
         frame_info_ = nullptr;
     }
     session_ = nullptr;
+    session_owner_.reset();
 }
