@@ -6,7 +6,8 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 
 option(VARJOTOOLKIT_BUILD_SAMPLES "Build VarjoToolkit sample applications" ON)
-option(VARJOTOOLKIT_BUILD_TESTS "Build VarjoToolkit tests. Some tests require a connected Varjo HMD/runtime." OFF)
+option(VARJOTOOLKIT_BUILD_TESTS "Build VarjoToolkit HMD-independent tests" OFF)
+option(VARJOTOOLKIT_BUILD_HMD_TESTS "Build tests that require Varjo Base and a connected Varjo HMD" OFF)
 option(VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS "Build experimental Varjo video post process shader wrapper" ON)
 
 # Backward compatibility for the previous option name.
@@ -226,15 +227,12 @@ if (VARJOTOOLKIT_BUILD_SAMPLES)
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT VarjoServiceLoggerSample)
 endif()
 
-if (VARJOTOOLKIT_BUILD_TESTS)
+if (VARJOTOOLKIT_BUILD_TESTS OR VARJOTOOLKIT_BUILD_HMD_TESTS)
     enable_testing()
+endif()
 
+if (VARJOTOOLKIT_BUILD_TESTS)
     set(_varjotoolkit_test_targets)
-
-    add_executable(VarjoToolkitCoreSmokeTest
-        tests/CoreWrappersSmokeTest.cpp
-    )
-    list(APPEND _varjotoolkit_test_targets VarjoToolkitCoreSmokeTest)
 
     add_executable(VarjoToolkitCsvUtilityTest
         tests/CsvUtilityTest.cpp
@@ -308,4 +306,39 @@ if (VARJOTOOLKIT_BUILD_TESTS)
 
         add_test(NAME ${_varjotoolkit_test_target} COMMAND ${_varjotoolkit_test_target})
     endforeach()
+
+    add_test(
+        NAME VarjoToolkitPackageConsumerTest
+        COMMAND ${CMAKE_COMMAND}
+            -DVARJOTOOLKIT_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+            -DVARJOTOOLKIT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -DVARJOTOOLKIT_PACKAGE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-consumer-test
+            -DVARJOTOOLKIT_CONFIG=$<CONFIG>
+            -DVARJOTOOLKIT_GENERATOR=${CMAKE_GENERATOR}
+            -DVARJOTOOLKIT_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
+            -DVARJOTOOLKIT_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/PackageConsumer/RunPackageConsumerTest.cmake
+    )
+endif()
+
+if (VARJOTOOLKIT_BUILD_HMD_TESTS)
+    add_executable(VarjoToolkitCoreSmokeTest
+        tests/CoreWrappersSmokeTest.cpp
+    )
+    target_link_libraries(VarjoToolkitCoreSmokeTest
+        PRIVATE
+            VarjoToolkit::VarjoToolkit
+    )
+    target_compile_definitions(VarjoToolkitCoreSmokeTest
+        PRIVATE
+            NOMINMAX
+            WIN32_LEAN_AND_MEAN
+    )
+    if (MSVC)
+        target_compile_options(VarjoToolkitCoreSmokeTest PRIVATE /utf-8 /W4 /permissive-)
+    else()
+        target_compile_options(VarjoToolkitCoreSmokeTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME VarjoToolkitCoreSmokeTest COMMAND VarjoToolkitCoreSmokeTest)
+    set_tests_properties(VarjoToolkitCoreSmokeTest PROPERTIES LABELS "hmd")
 endif()
