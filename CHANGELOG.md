@@ -4,6 +4,16 @@
 
 ### Added
 
+- `VarjoOcclusionMeshDumpSample`.
+  - Dumps Varjo occlusion meshes for all runtime views.
+  - Writes vertex CSV and OBJ triangle-list files.
+  - Supports clockwise and counter-clockwise winding selection.
+- `VarjoVideoPostProcessD3D12Sample`.
+  - Demonstrates `VarjoVideoPostProcessShader` with D3D12.
+  - Creates a native D3D12 command queue and passes it to `configureD3D12`.
+  - Compiles an embedded HLSL compute shader in the sample and passes the compiled blob to the wrapper.
+  - Submits a trivially-copyable constant buffer struct without the wrapper interpreting its fields.
+  - Applies a simple circular VST dimming/highlight effect and updates parameters at runtime.
 - `VarjoVideoPostProcessD3D11Sample`.
   - Demonstrates `VarjoVideoPostProcessShader` with D3D11.
   - Compiles an embedded HLSL compute shader in the sample and passes the compiled blob to the wrapper.
