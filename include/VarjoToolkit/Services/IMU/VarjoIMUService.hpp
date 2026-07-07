@@ -14,6 +14,8 @@
 #include <string>
 #include <thread>
 
+#include <VarjoToolkit/Core/VarjoFrameInfo.hpp>
+
 // Service-style IMU/head-pose logger.
 //
 // This service samples Varjo frame/head-pose data, keeps a bounded in-memory
@@ -35,7 +37,7 @@ public:
         varjo_Vector3D position{};
         varjo_Vector3D euler_deg{};
         varjo_Vector3D angular_velocity{}; // deg/s, computed from euler_deg delta
-        varjo_FrameInfo frame_info{};
+        VarjoFrameInfoSnapshot frame_info{};
 
         bool valid = false;
     };
