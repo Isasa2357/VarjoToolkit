@@ -14,6 +14,10 @@ VarjoToolkit は、Varjo Native SDK を使う C++ アプリケーションから
   - `varjo_Session*`、`std::shared_ptr<varjo_Session>`、`VarjoSession` から構築可能
   - `std::shared_ptr<varjo_Session>` または `VarjoSession` から構築した場合は session ownership を保持
   - 保存やキュー投入に使える `VarjoFrameInfoSnapshot` を提供
+- `VarjoToolkit::Csv`
+  - Varjo Native SDK 型や VarjoToolkit 型を CSV 行文字列へ変換
+  - 型に対応した CSV ヘッダ文字列を生成
+  - 任意の `x,y,z` 形式 struct などに使える汎用 header / join helper を提供
 - `VarjoEyeTrackingService`
   - Varjo gaze と eye measurements の取得
   - user IPD / HMD IPD / IPD adjustment mode の取得
@@ -95,11 +99,63 @@ cmake --build out\build\default --config Release
 
 Boost が自動検出できない場合は、CMake の include search path から見える場所に Boost headers を置くか、CMake 側の探索設定を追加してください。
 
+## CSV ユーティリティ
+
+`include/VarjoToolkit/Utilities/VarjoCsv.hpp` を include すると、Varjo 型や Toolkit 型を CSV 行文字列へ変換できます。
+
+```cpp
+#include <VarjoToolkit/Utilities/VarjoCsv.hpp>
+
+varjo_Vector3D coord{1.0, 2.0, 3.0};
+
+std::string header = VarjoToolkit::Csv::header<varjo_Vector3D>("coord");
+std::string row = VarjoToolkit::Csv::toCsv(coord);
+
+// header: "coord.x,coord.y,coord.z"
+// row:    "1,2,3"
+```
+
+任意の `x,y,z` 形式の独自 struct では、汎用 helper を使えます。
+
+```cpp
+struct dxyz {
+    double x;
+    double y;
+    double z;
+};
+
+dxyz coord{1.0, 2.0, 3.0};
+
+std::string header = VarjoToolkit::Csv::makeHeader("coord", {"x", "y", "z"});
+std::string row = VarjoToolkit::Csv::join({
+    VarjoToolkit::Csv::number(coord.x),
+    VarjoToolkit::Csv::number(coord.y),
+    VarjoToolkit::Csv::number(coord.z)
+});
+```
+
+現在は主に以下に対応しています。
+
+- `varjo_Vector2Df`
+- `varjo_Vector3D`
+- `varjo_Matrix`
+- `varjo_Matrix3x3`
+- `varjo_Ray`
+- `varjo_ViewInfo`
+- `varjo_BufferMetadata`
+- `varjo_CameraIntrinsics2`
+- `varjo_Gaze`
+- `varjo_EyeMeasurements`
+- `VarjoProjectedGazePosition`
+- `VarjoFrameInfoSnapshot`
+
 ## テスト
 
 テストは `VARJOTOOLKIT_BUILD_TESTS=ON` で有効化します。
 
-現在の `VarjoToolkitCoreSmokeTest` は、Varjo Base が起動しており、Varjo HMD が接続されている前提の smoke test です。`VarjoSession` の初期化、`VarjoFrameInfo` の作成、`varjo_WaitSync`、snapshot 取得、`std::shared_ptr<varjo_Session>` 互換、move ownership を確認します。
+`VarjoToolkitCoreSmokeTest` は、Varjo Base が起動しており、Varjo HMD が接続されている前提の smoke test です。`VarjoSession` の初期化、`VarjoFrameInfo` の作成、`varjo_WaitSync`、snapshot 取得、`std::shared_ptr<varjo_Session>` 互換、move ownership を確認します。
+
+`VarjoToolkitCsvUtilityTest` は CSV 文字列生成の HMD 不要テストです。Varjo SDK のヘッダとライブラリは必要ですが、Varjo runtime 起動や HMD 接続は不要です。
 
 ```bat
 set "VARJO_SDK_ROOT=C:\Program Files\Varjo\Varjo Native SDK"
@@ -187,6 +243,7 @@ target_link_libraries(YourApp
 - `VarjoFrameInfo` は `varjo_FrameInfo*` を所有します。長期保存や queue には `VarjoFrameInfoSnapshot` を使ってください。
 - `VarjoFrameInfo` は `std::shared_ptr<varjo_Session>` から構築した場合、その shared ownership を保持します。既存サービスが持つ session handle と安全に併用できます。
 - `varjo_Session*` から構築した `VarjoFrameInfo` は session を所有しません。呼び出し側が session lifetime を保証してください。
+- CSV ユーティリティは値のエスケープを行いません。現在の対象は数値・bool・列挙値など、カンマを含まない値です。
 - `VarjoEyeTrackingService` は `varjo_WaitSync` で取得した frame info を内部バッファに保持し、gaze の `captureTime` に対応する frame info を使って座標変換します。
 - `VarjoIMUService` も `varjo_WaitSync` を使用します。レンダリングやカメラ処理への影響を抑えるため、worker thread は低優先度で動作します。
 - DataStream 系サービスでは、Varjo callback 内では CPU buffer のコピーだけを行い、ファイル書き出しは別 thread で行います。
