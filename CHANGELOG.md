@@ -4,6 +4,14 @@
 
 ### Added
 
+- CMake install / package support.
+  - Installs the `VarjoToolkit` static library and public headers.
+  - Exports `VarjoToolkit::VarjoToolkit` through `VarjoToolkitTargets.cmake`.
+  - Generates `VarjoToolkitConfig.cmake` and `VarjoToolkitConfigVersion.cmake` for `find_package(VarjoToolkit CONFIG REQUIRED)`.
+- `scripts/run_coverage_open_cpp_coverage.bat`.
+  - Builds Debug tests with Visual Studio generator.
+  - Runs HMD-independent tests through OpenCppCoverage.
+  - Exports HTML and Cobertura XML reports under `out/coverage`.
 - `VarjoVideoPostProcessShader`
   - Thin wrapper for Varjo Native SDK experimental Video Post Process Shader API.
   - Accepts compiled shader bytecode as `const void* + size`; it does not compile HLSL source.
@@ -33,6 +41,8 @@
 
 ### Changed
 
+- Public include paths now use build/install generator expressions so the target can be exported cleanly.
+- Documented install/package and coverage workflows in `README.md`.
 - Documented the Varjo Native SDK video post process shader wrapper policy in `docs/ARCHITECTURE.md`.
 - Removed the core Boost dependency by replacing the eye tracking frame history `boost::circular_buffer` usage with `std::deque`-based bounded history logic.
 - Removed Boost discovery / FetchContent fallback from CMake.
