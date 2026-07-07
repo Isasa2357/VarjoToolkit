@@ -306,9 +306,7 @@ VarjoIMUService::VarjoIMUData VarjoIMUService::sampleOnce()
     data.frame_number = frame_info.frameNumber();
     data.frame_display_time = frame_info.displayTime();
     data.frame_display_time_unix_us = convertVarjoTimeToUnixUs(session_.get(), data.frame_display_time);
-    if (frame_info.get()) {
-        data.frame_info = *frame_info.get();
-    }
+    data.frame_info = frame_info.snapshot();
 
     data.pose = varjo_FrameGetPose(session_.get(), varjo_PoseType_Center);
     data.position = varjo_GetPosition(&data.pose);
