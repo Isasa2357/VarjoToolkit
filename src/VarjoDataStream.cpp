@@ -10,6 +10,11 @@ int64_t channelBits(varjo_ChannelFlag flags)
     return static_cast<int64_t>(flags);
 }
 
+varjo_ChannelFlag channelIntersection(varjo_ChannelFlag a, varjo_ChannelFlag b)
+{
+    return static_cast<varjo_ChannelFlag>(channelBits(a) & channelBits(b));
+}
+
 } // namespace
 
 VarjoDataStream::VarjoDataStream(varjo_Session* session)
@@ -190,7 +195,11 @@ bool VarjoDataStream::startBest(const ConfigRequest& request, varjo_ChannelFlag 
     varjo_ChannelFlag start_channels = channels;
     if (start_channels == varjo_ChannelFlag_None) {
         if (request.requiredChannels != varjo_ChannelFlag_None) {
-            start_channels = request.requiredChannels;
+            if (request.requireAllRequiredChannels) {
+                start_channels = request.requiredChannels;
+            } else {
+                start_channels = channelIntersection(config.value().channelFlags, request.requiredChannels);
+            }
         } else {
             start_channels = config.value().channelFlags;
         }
