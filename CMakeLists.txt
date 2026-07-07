@@ -79,6 +79,8 @@ add_library(VarjoToolkit STATIC
     src/VarjoSession.cpp
     src/VarjoFrameInfo.cpp
     src/VarjoCsv.cpp
+    src/VarjoDataStream.cpp
+    src/VarjoDataStreamBufferLock.cpp
     src/VarjoEyeTrackingService.cpp
     src/VarjoIMUService.cpp
     src/VarjoVSTService.cpp
@@ -141,7 +143,16 @@ if (VARJOTOOLKIT_BUILD_TESTS)
             VarjoToolkit::VarjoToolkit
     )
 
-    foreach(_varjotoolkit_test_target IN ITEMS VarjoToolkitCoreSmokeTest VarjoToolkitCsvUtilityTest)
+    add_executable(VarjoToolkitDataStreamWrappersTest
+        tests/DataStreamWrappersTest.cpp
+    )
+
+    target_link_libraries(VarjoToolkitDataStreamWrappersTest
+        PRIVATE
+            VarjoToolkit::VarjoToolkit
+    )
+
+    foreach(_varjotoolkit_test_target IN ITEMS VarjoToolkitCoreSmokeTest VarjoToolkitCsvUtilityTest VarjoToolkitDataStreamWrappersTest)
         target_compile_definitions(${_varjotoolkit_test_target}
             PRIVATE
                 NOMINMAX
@@ -157,4 +168,5 @@ if (VARJOTOOLKIT_BUILD_TESTS)
 
     add_test(NAME VarjoToolkitCoreSmokeTest COMMAND VarjoToolkitCoreSmokeTest)
     add_test(NAME VarjoToolkitCsvUtilityTest COMMAND VarjoToolkitCsvUtilityTest)
+    add_test(NAME VarjoToolkitDataStreamWrappersTest COMMAND VarjoToolkitDataStreamWrappersTest)
 endif()
