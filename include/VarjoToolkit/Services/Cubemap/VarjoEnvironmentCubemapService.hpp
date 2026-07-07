@@ -17,13 +17,8 @@
 #include <vector>
 
 #include <VarjoToolkit/DataStream/VarjoDataStream.hpp>
+#include <VarjoToolkit/Utilities/VarjoTimestampMapping.hpp>
 
-// Service-style logger for Varjo environment cubemap data stream frames.
-//
-// The EnvironmentCubemap stream is an HDR lighting estimate. This service uses
-// VarjoDataStream for stream start/stop and VarjoDataStreamBufferLock in the
-// callback path. It copies CPU buffers in the callback and writes packed cubemap
-// raw buffers plus metadata CSV from a separate writer thread.
 class VarjoEnvironmentCubemapService {
 public:
     struct Paths {
@@ -88,6 +83,7 @@ private:
 private:
     std::shared_ptr<varjo_Session> session_;
     VarjoDataStream data_stream_;
+    VarjoTimestampMapping timestamp_mapping_;
     std::filesystem::path output_directory_;
     std::wstring base_filename_;
     size_t queue_capacity_ = 90;
