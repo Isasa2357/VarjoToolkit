@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(VarjoToolkit VERSION 0.1.0 LANGUAGES CXX)
+project(VarjoToolkit VERSION 0.2.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
@@ -223,7 +223,7 @@ install(FILES
 )
 
 if (VARJOTOOLKIT_BUILD_SAMPLES)
-    add_subdirectory(samples/ServiceLoggerSample)
+    add_subdirectory(samples)
     set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT VarjoServiceLoggerSample)
 endif()
 
