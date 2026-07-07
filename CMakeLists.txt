@@ -160,61 +160,59 @@ endif()
 if (VARJOTOOLKIT_BUILD_TESTS)
     enable_testing()
 
+    set(_varjotoolkit_test_targets)
+
     add_executable(VarjoToolkitCoreSmokeTest
         tests/CoreWrappersSmokeTest.cpp
     )
-
-    target_link_libraries(VarjoToolkitCoreSmokeTest
-        PRIVATE
-            VarjoToolkit::VarjoToolkit
-    )
+    list(APPEND _varjotoolkit_test_targets VarjoToolkitCoreSmokeTest)
 
     add_executable(VarjoToolkitCsvUtilityTest
         tests/CsvUtilityTest.cpp
     )
-
-    target_link_libraries(VarjoToolkitCsvUtilityTest
-        PRIVATE
-            VarjoToolkit::VarjoToolkit
-    )
+    list(APPEND _varjotoolkit_test_targets VarjoToolkitCsvUtilityTest)
 
     add_executable(VarjoToolkitDataStreamWrappersTest
         tests/DataStreamWrappersTest.cpp
     )
-
-    target_link_libraries(VarjoToolkitDataStreamWrappersTest
-        PRIVATE
-            VarjoToolkit::VarjoToolkit
-    )
+    list(APPEND _varjotoolkit_test_targets VarjoToolkitDataStreamWrappersTest)
 
     add_executable(VarjoToolkitCameraPropertiesTest
         tests/CameraPropertiesTest.cpp
     )
-
-    target_link_libraries(VarjoToolkitCameraPropertiesTest
-        PRIVATE
-            VarjoToolkit::VarjoToolkit
-    )
+    list(APPEND _varjotoolkit_test_targets VarjoToolkitCameraPropertiesTest)
 
     add_executable(VarjoToolkitScopedLockChromaKeyTest
         tests/ScopedLockChromaKeyTest.cpp
     )
-
-    target_link_libraries(VarjoToolkitScopedLockChromaKeyTest
-        PRIVATE
-            VarjoToolkit::VarjoToolkit
-    )
+    list(APPEND _varjotoolkit_test_targets VarjoToolkitScopedLockChromaKeyTest)
 
     add_executable(VarjoToolkitRenderingWorldWrappersTest
         tests/RenderingWorldWrappersTest.cpp
     )
+    list(APPEND _varjotoolkit_test_targets VarjoToolkitRenderingWorldWrappersTest)
 
-    target_link_libraries(VarjoToolkitRenderingWorldWrappersTest
-        PRIVATE
-            VarjoToolkit::VarjoToolkit
+    add_executable(VarjoToolkitQueueTimestampUtilityTest
+        tests/QueueTimestampUtilityTest.cpp
     )
+    list(APPEND _varjotoolkit_test_targets VarjoToolkitQueueTimestampUtilityTest)
 
-    foreach(_varjotoolkit_test_target IN ITEMS VarjoToolkitCoreSmokeTest VarjoToolkitCsvUtilityTest VarjoToolkitDataStreamWrappersTest VarjoToolkitCameraPropertiesTest VarjoToolkitScopedLockChromaKeyTest VarjoToolkitRenderingWorldWrappersTest)
+    add_executable(VarjoToolkitCameraChromaDetailedTest
+        tests/CameraChromaDetailedTest.cpp
+    )
+    list(APPEND _varjotoolkit_test_targets VarjoToolkitCameraChromaDetailedTest)
+
+    add_executable(VarjoToolkitRenderingWorldDetailedTest
+        tests/RenderingWorldDetailedTest.cpp
+    )
+    list(APPEND _varjotoolkit_test_targets VarjoToolkitRenderingWorldDetailedTest)
+
+    foreach(_varjotoolkit_test_target IN LISTS _varjotoolkit_test_targets)
+        target_link_libraries(${_varjotoolkit_test_target}
+            PRIVATE
+                VarjoToolkit::VarjoToolkit
+        )
+
         target_compile_definitions(${_varjotoolkit_test_target}
             PRIVATE
                 NOMINMAX
@@ -226,12 +224,7 @@ if (VARJOTOOLKIT_BUILD_TESTS)
         else()
             target_compile_options(${_varjotoolkit_test_target} PRIVATE -Wall -Wextra -Wpedantic)
         endif()
-    endforeach()
 
-    add_test(NAME VarjoToolkitCoreSmokeTest COMMAND VarjoToolkitCoreSmokeTest)
-    add_test(NAME VarjoToolkitCsvUtilityTest COMMAND VarjoToolkitCsvUtilityTest)
-    add_test(NAME VarjoToolkitDataStreamWrappersTest COMMAND VarjoToolkitDataStreamWrappersTest)
-    add_test(NAME VarjoToolkitCameraPropertiesTest COMMAND VarjoToolkitCameraPropertiesTest)
-    add_test(NAME VarjoToolkitScopedLockChromaKeyTest COMMAND VarjoToolkitScopedLockChromaKeyTest)
-    add_test(NAME VarjoToolkitRenderingWorldWrappersTest COMMAND VarjoToolkitRenderingWorldWrappersTest)
+        add_test(NAME ${_varjotoolkit_test_target} COMMAND ${_varjotoolkit_test_target})
+    endforeach()
 endif()
