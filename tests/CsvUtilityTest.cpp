@@ -1,7 +1,9 @@
 #include <VarjoToolkit/Utilities/VarjoCsv.hpp>
 
 #include <iostream>
+#include <sstream>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -19,6 +21,28 @@ bool expectEqual(const std::string& actual, const std::string& expected, const s
 {
     if (actual != expected) {
         fail(label, actual, expected);
+        return false;
+    }
+    return true;
+}
+
+std::vector<std::string> splitCsv(const std::string& csv)
+{
+    std::vector<std::string> out;
+    std::stringstream ss(csv);
+    std::string item;
+    while (std::getline(ss, item, ',')) {
+        out.push_back(item);
+    }
+    return out;
+}
+
+bool expectFieldCountEqual(const std::string& row, const std::string& header, const std::string& label)
+{
+    const auto row_fields = splitCsv(row);
+    const auto header_fields = splitCsv(header);
+    if (row_fields.size() != header_fields.size()) {
+        fail(label, std::to_string(row_fields.size()), std::to_string(header_fields.size()));
         return false;
     }
     return true;
@@ -104,6 +128,93 @@ int main()
         return 1;
     }
     if (!expectEqual(toCsv(frame_snapshot, 0), "123,456,1", "FrameInfoSnapshot zero-view row")) {
+        return 1;
+    }
+
+    varjo_StreamConfig stream_config{};
+    stream_config.streamId = 9;
+    stream_config.channelFlags = varjo_ChannelFlag_Left | varjo_ChannelFlag_Right;
+    stream_config.streamType = varjo_StreamType_DistortedColor;
+    stream_config.bufferType = varjo_BufferType_CPU;
+    stream_config.format = varjo_TextureFormat_NV12;
+    stream_config.frameRate = 90;
+    stream_config.width = 2880;
+    stream_config.height = 1404;
+    stream_config.rowStride = 2880;
+    if (!expectFieldCountEqual(toCsv(stream_config), headerForStreamConfig("stream"), "StreamConfig field count")) {
+        return 1;
+    }
+
+    varjo_CameraPropertyValue int_value{};
+    int_value.type = varjo_CameraPropertyDataType_Int;
+    int_value.value.intValue = 42;
+    if (!expectEqual(headerForCameraPropertyValue("value"), "value.type,value.doubleValue,value.intValue,value.boolValue", "CameraPropertyValue header")) {
+        return 1;
+    }
+    if (!expectEqual(toCsv(int_value), "1,,42,", "CameraPropertyValue int row")) {
+        return 1;
+    }
+
+    varjo_WorldObject world_object{};
+    world_object.id = 10;
+    world_object.typeMask = varjo_WorldComponentTypeMask_Pose | varjo_WorldComponentTypeMask_ObjectMarker;
+    if (!expectEqual(toCsv(world_object), "10,3,0,0", "WorldObject row")) {
+        return 1;
+    }
+
+    varjo_WorldObjectMarkerComponent marker{};
+    marker.id = 77;
+    marker.flags = varjo_WorldObjectMarkerFlags_DoPrediction;
+    marker.error = varjo_WorldObjectMarkerError_None;
+    marker.size.width = 0.1;
+    marker.size.height = 0.2;
+    marker.size.depth = 0.3;
+    if (!expectEqual(toCsv(marker), "77,1,0,0.10000000000000001,0.20000000000000001,0.29999999999999999", "WorldObjectMarkerComponent row")) {
+        return 1;
+    }
+
+    varjo_Vector2Df vertices[2] = {varjo_Vector2Df{1.0f, 2.0f}, varjo_Vector2Df{3.0f, 4.0f}};
+    varjo_Mesh2Df mesh{};
+    mesh.vertices = vertices;
+    mesh.vertexCount = 2;
+    if (!expectEqual(headerForMesh2Df("mesh", 2), "mesh.vertexCount,mesh.vertices[0].x,mesh.vertices[0].y,mesh.vertices[1].x,mesh.vertices[1].y", "Mesh2Df fixed header")) {
+        return 1;
+    }
+    if (!expectEqual(toCsv(mesh, 2), "2,1,2,3,4", "Mesh2Df fixed row")) {
+        return 1;
+    }
+
+    varjo_Event event{};
+    event.header.type = varjo_EventType_Button;
+    event.header.timestamp = 12345;
+    event.data.button.pressed = varjo_True;
+    event.data.button.buttonId = varjo_ButtonId_Application;
+    if (!expectFieldCountEqual(toCsv(event), headerForEvent("event"), "Event field count")) {
+        return 1;
+    }
+
+    varjo_StreamFrame stream_frame{};
+    stream_frame.type = varjo_StreamType_DistortedColor;
+    stream_frame.id = 5;
+    stream_frame.frameNumber = 6;
+    stream_frame.channels = varjo_ChannelFlag_Left;
+    stream_frame.dataFlags = varjo_DataFlag_Buffer;
+    stream_frame.metadata.distortedColor.timestamp = 100;
+    stream_frame.metadata.distortedColor.ev = 1.0;
+    stream_frame.metadata.distortedColor.exposureTime = 0.5;
+    stream_frame.metadata.distortedColor.whiteBalanceTemperature = 6500.0;
+    stream_frame.metadata.distortedColor.cameraCalibrationConstant = 2.0;
+    if (!expectFieldCountEqual(toCsv(stream_frame), headerForStreamFrame("frame"), "StreamFrame field count")) {
+        return 1;
+    }
+
+    VarjoCameraPropertyInfo property_info{};
+    property_info.configType = varjo_CameraPropertyConfigType_List;
+    property_info.currentMode = varjo_CameraPropertyMode_Manual;
+    property_info.currentValue = int_value;
+    property_info.supported = true;
+    property_info.valid = true;
+    if (!expectEqual(toCsv(property_info), "1,0,0,2,1,,42,,1,1", "VarjoCameraPropertyInfo row")) {
         return 1;
     }
 
