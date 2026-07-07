@@ -63,7 +63,6 @@ varjo_Vector3D toVarjoVector3D(const Vec3& v) { return varjo_Vector3D{v.x, v.y, 
 
 Vec4 mulMat4Vec4(const double mat[16], const Vec4& v)
 {
-    // Varjo matrix is column-major. result = M * v.
     return Vec4{
         mat[0] * v.x + mat[4] * v.y + mat[8] * v.z + mat[12] * v.w,
         mat[1] * v.x + mat[5] * v.y + mat[9] * v.z + mat[13] * v.w,
@@ -74,8 +73,6 @@ Vec4 mulMat4Vec4(const double mat[16], const Vec4& v)
 
 Vec3 viewMatrixEyeOriginWorld(const double view[16])
 {
-    // view is world -> eye. For Varjo view matrices this is rigid, so inverse
-    // origin is -R^T t. This avoids using current varjo_FrameGetPose().
     const double tx = view[12];
     const double ty = view[13];
     const double tz = view[14];
@@ -88,7 +85,6 @@ Vec3 viewMatrixEyeOriginWorld(const double view[16])
 
 Vec3 transformViewVectorToWorld(const double view[16], const Vec3& v)
 {
-    // Inverse rotation of the world->eye view matrix: R^T * v.
     return Vec3{
         view[0] * v.x + view[1] * v.y + view[2] * v.z,
         view[4] * v.x + view[5] * v.y + view[6] * v.z,
@@ -146,8 +142,6 @@ varjo_Vector3D transformHeadPointToWorldUsingFrameInfo(
 
 void setCurrentThreadLowPriorityForWaitSync()
 {
-    // This worker calls varjo_WaitSync only to collect frameInfo for gaze
-    // projection. It must not compete with the main rendering/camera path.
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_LOWEST);
 }
 
@@ -314,7 +308,6 @@ std::string frameInfoHeaderCsv(const std::string& name, size_t viewCount)
 
 VarjoEyeTrackingProvider::VarjoEyeTrackingProvider(const std::shared_ptr<varjo_Session>& session)
     : session_(session)
-    , frameInfos_(boost::circular_buffer<FrameInfo>(512))
     , viewCount_(session ? varjo_GetViewCount(session.get()) : 0)
 {}
 
@@ -333,7 +326,13 @@ void VarjoEyeTrackingProvider::initialize(OutputFilterType outputFilterType, Out
     this->getFrameInfoWorker_ = std::thread(&VarjoEyeTrackingProvider::getFrameInfoWorkerFunction, this);
     SetThreadPriority(static_cast<HANDLE>(this->getFrameInfoWorker_.native_handle()), THREAD_PRIORITY_LOWEST);
 
-    while (!this->workerStopSignal_.load() && !this->frameInfos_.full()) {
+    while (!this->workerStopSignal_.load()) {
+        {
+            std::lock_guard lock(this->frameInfoMtx_);
+            if (this->frameInfos_.size() >= this->frameInfoCapacity_) {
+                break;
+            }
+        }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
@@ -592,6 +591,9 @@ void VarjoEyeTrackingProvider::getFrameInfoWorkerFunction()
         {
             std::lock_guard lock(this->frameInfoMtx_);
             this->frameInfos_.push_back(std::move(frameInfo));
+            while (this->frameInfos_.size() > this->frameInfoCapacity_) {
+                this->frameInfos_.pop_front();
+            }
         }
     }
 }
