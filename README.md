@@ -74,12 +74,13 @@ VarjoToolkit/
 - Varjo Native SDK
 - Boost headers
   - 現在は `boost/circular_buffer.hpp` を使用
+  - 未検出の場合は CMake が `FetchContent` で Boost headers を自動取得します
 - `ffmpeg.exe`
   - `VarjoVSTService` で MP4 を出力する場合のみ必要
 
 ## ビルド方法
 
-`VARJO_SDK_ROOT` には Varjo Native SDK のルートディレクトリを指定してください。
+`VARJO_SDK_ROOT` には Varjo Native SDK のルートディレクトリを指定してください。Boost headers は未検出なら CMake が自動取得します。
 
 ```bat
 set "VARJO_SDK_ROOT=C:\Program Files\Varjo\Varjo Native SDK"
@@ -91,6 +92,19 @@ cmake -S . -B out\build\default ^
   -DVARJOTOOLKIT_BUILD_SAMPLES=ON
 
 cmake --build out\build\default --config Release
+```
+
+オフライン環境や既存 Boost を使いたい場合だけ `BOOST_INCLUDE_DIR` を指定してください。
+
+```bat
+cmake -S . -B out\build\default ^
+  -G "NMake Makefiles" ^
+  -DVARJO_INCLUDE_DIR="%VARJO_SDK_ROOT%\include" ^
+  -DVARJO_LIBRARY="%VARJO_SDK_ROOT%\lib\VarjoLib.lib" ^
+  -DBOOST_INCLUDE_DIR="C:\path\to\boost" ^
+  -DVARJOTOOLKIT_FETCH_BOOST=OFF ^
+  -DVARJOTOOLKIT_BUILD_SAMPLES=OFF ^
+  -DVARJOTOOLKIT_BUILD_TESTS=ON
 ```
 
 ## Scoped lock wrapper
@@ -277,7 +291,7 @@ std::string row = VarjoToolkit::Csv::join({
 
 ## テスト
 
-テストは `VARJOTOOLKIT_BUILD_TESTS=ON` で有効化します。
+テストは `VARJOTOOLKIT_BUILD_TESTS=ON` で有効化します。Boost headers は未検出なら CMake が自動取得します。
 
 ```bat
 set "VARJO_SDK_ROOT=C:\Program Files\Varjo\Varjo Native SDK"
