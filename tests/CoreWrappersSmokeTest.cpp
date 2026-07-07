@@ -53,6 +53,15 @@ int main()
     if (!frame_info.valid()) {
         return fail("VarjoFrameInfo failed to create varjo_FrameInfo");
     }
+    if (!frame_info.ownsSession()) {
+        return fail("VarjoFrameInfo constructed from VarjoSession should retain shared session ownership");
+    }
+    if (frame_info.session() != session.get()) {
+        return fail("VarjoFrameInfo::session does not match VarjoSession::get");
+    }
+    if (!frame_info.sharedSession() || frame_info.sharedSession().get() != session.get()) {
+        return fail("VarjoFrameInfo::sharedSession returned an unexpected pointer");
+    }
 
     if (frame_info.viewCount() != view_count) {
         return fail("VarjoFrameInfo::viewCount does not match VarjoSession::viewCount");
@@ -82,9 +91,37 @@ int main()
         return fail("first view preferred size is invalid");
     }
 
+    VarjoFrameInfo shared_frame_info(shared_session);
+    if (!shared_frame_info.valid()) {
+        return fail("VarjoFrameInfo constructed from shared_ptr failed");
+    }
+    if (!shared_frame_info.ownsSession()) {
+        return fail("VarjoFrameInfo constructed from shared_ptr should retain ownership");
+    }
+    if (shared_frame_info.session() != session.get()) {
+        return fail("shared_ptr VarjoFrameInfo session pointer mismatch");
+    }
+    if (!shared_frame_info.waitSync()) {
+        return fail("shared_ptr VarjoFrameInfo waitSync failed");
+    }
+
+    VarjoFrameInfo raw_frame_info(session.get());
+    if (!raw_frame_info.valid()) {
+        return fail("VarjoFrameInfo constructed from raw varjo_Session* failed");
+    }
+    if (raw_frame_info.ownsSession()) {
+        return fail("raw pointer VarjoFrameInfo should not report session ownership");
+    }
+    if (!raw_frame_info.waitSync()) {
+        return fail("raw pointer VarjoFrameInfo waitSync failed");
+    }
+
     VarjoFrameInfo moved_frame_info(std::move(frame_info));
     if (!moved_frame_info.valid()) {
         return fail("VarjoFrameInfo move constructor did not preserve ownership");
+    }
+    if (!moved_frame_info.ownsSession()) {
+        return fail("moved VarjoFrameInfo did not preserve shared session ownership");
     }
     if (frame_info.valid()) {
         return fail("moved-from VarjoFrameInfo still reports valid ownership");
