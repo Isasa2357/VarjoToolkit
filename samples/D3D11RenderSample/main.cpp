@@ -242,6 +242,7 @@ public:
             D3D_FEATURE_LEVEL_10_1,
             D3D_FEATURE_LEVEL_10_0,
         };
+        const UINT featureLevelCount = static_cast<UINT>(sizeof(featureLevels) / sizeof(featureLevels[0]));
         D3D_FEATURE_LEVEL createdLevel{};
         throwIfFailed(
             D3D11CreateDevice(
@@ -250,7 +251,7 @@ public:
                 nullptr,
                 flags,
                 featureLevels,
-                static_cast<UINT>(std::size(featureLevels)),
+                featureLevelCount,
                 D3D11_SDK_VERSION,
                 &device_,
                 &createdLevel,
