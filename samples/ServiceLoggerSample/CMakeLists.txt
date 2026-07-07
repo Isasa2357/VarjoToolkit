@@ -19,3 +19,13 @@ if (MSVC)
 else()
     target_compile_options(VarjoServiceLoggerSample PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+
+add_subdirectory(
+    "${CMAKE_CURRENT_LIST_DIR}/../D3D11RenderSample"
+    "${CMAKE_BINARY_DIR}/samples/D3D11RenderSample"
+)
+
+add_subdirectory(
+    "${CMAKE_CURRENT_LIST_DIR}/../D3D12RenderSample"
+    "${CMAKE_BINARY_DIR}/samples/D3D12RenderSample"
+)
