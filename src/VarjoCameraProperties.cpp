@@ -291,7 +291,7 @@ bool VarjoCameraProperties::setMode(varjo_CameraPropertyType type, varjo_CameraP
         return false;
     }
 
-    const bool need_lock = !holding_lock_;
+    const bool need_lock = !holdingLock();
     if (need_lock && !acquireLock()) {
         return false;
     }
@@ -311,7 +311,7 @@ bool VarjoCameraProperties::setValue(varjo_CameraPropertyType type, const varjo_
         return false;
     }
 
-    const bool need_lock = !holding_lock_;
+    const bool need_lock = !holdingLock();
     if (need_lock && !acquireLock()) {
         return false;
     }
@@ -331,7 +331,7 @@ bool VarjoCameraProperties::setManualValue(varjo_CameraPropertyType type, const 
         return false;
     }
 
-    const bool need_lock = !holding_lock_;
+    const bool need_lock = !holdingLock();
     if (need_lock && !acquireLock()) {
         return false;
     }
@@ -352,7 +352,7 @@ bool VarjoCameraProperties::reset(varjo_CameraPropertyType type)
         return false;
     }
 
-    const bool need_lock = !holding_lock_;
+    const bool need_lock = !holdingLock();
     if (need_lock && !acquireLock()) {
         return false;
     }
@@ -373,7 +373,7 @@ bool VarjoCameraProperties::resetAll()
         return false;
     }
 
-    const bool need_lock = !holding_lock_;
+    const bool need_lock = !holdingLock();
     if (need_lock && !acquireLock()) {
         return false;
     }
@@ -394,7 +394,7 @@ bool VarjoCameraProperties::applyNextModeOrValue(varjo_CameraPropertyType type)
         return false;
     }
 
-    const bool need_lock = !holding_lock_;
+    const bool need_lock = !holdingLock();
     if (need_lock && !acquireLock()) {
         return false;
     }
@@ -431,7 +431,7 @@ bool VarjoCameraProperties::applyNextModeOrValue(varjo_CameraPropertyType type)
 
 bool VarjoCameraProperties::acquireLock()
 {
-    if (holding_lock_) {
+    if (holdingLock()) {
         return true;
     }
     if (!session_) {
@@ -439,30 +439,26 @@ bool VarjoCameraProperties::acquireLock()
         return false;
     }
 
-    const bool ok = varjo_Lock(session_, varjo_LockType_Camera) == varjo_True;
-    holding_lock_ = ok;
-    if (!ok) {
-        setLastError("failed to acquire Varjo camera lock");
-    } else {
-        last_error_.clear();
+    camera_lock_ = std::make_unique<VarjoScopedLock>(session_, varjo_LockType_Camera);
+    if (!camera_lock_ || !camera_lock_->locked()) {
+        const std::string detail = camera_lock_ ? camera_lock_->lastError() : std::string{};
+        camera_lock_.reset();
+        setLastError(detail.empty() ? "failed to acquire Varjo camera lock" : detail);
+        return false;
     }
-    return ok;
+
+    last_error_.clear();
+    return true;
 }
 
 void VarjoCameraProperties::releaseLock()
 {
-    if (!holding_lock_ || !session_) {
-        holding_lock_ = false;
-        return;
-    }
-
-    varjo_Unlock(session_, varjo_LockType_Camera);
-    holding_lock_ = false;
+    camera_lock_.reset();
 }
 
 bool VarjoCameraProperties::holdingLock() const
 {
-    return holding_lock_;
+    return camera_lock_ && camera_lock_->locked();
 }
 
 const std::string& VarjoCameraProperties::lastError() const
