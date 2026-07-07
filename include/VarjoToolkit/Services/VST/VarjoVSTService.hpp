@@ -18,13 +18,8 @@
 #include <vector>
 
 #include <VarjoToolkit/DataStream/VarjoDataStream.hpp>
+#include <VarjoToolkit/Utilities/VarjoTimestampMapping.hpp>
 
-// Service-style logger for Varjo VST distorted-color camera frames.
-//
-// This service uses VarjoDataStream for stream start/stop and
-// VarjoDataStreamBufferLock in the callback path. It copies each incoming CPU
-// NV12 buffer in the Varjo callback, and writes video/metadata from a separate
-// writer thread so the callback returns quickly.
 class VarjoVSTService {
 public:
     struct Paths {
@@ -97,6 +92,7 @@ private:
 private:
     std::shared_ptr<varjo_Session> session_;
     VarjoDataStream data_stream_;
+    VarjoTimestampMapping timestamp_mapping_;
     std::filesystem::path output_directory_;
     std::wstring base_filename_;
     size_t queue_capacity_ = 180;
