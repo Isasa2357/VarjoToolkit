@@ -21,16 +21,6 @@ namespace {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
 
-std::string narrowString(const std::wstring& value)
-{
-    std::string out;
-    out.reserve(value.size());
-    for (wchar_t ch : value) {
-        out.push_back((ch >= 0 && ch <= 0x7f) ? static_cast<char>(ch) : '?');
-    }
-    return out;
-}
-
 void setCurrentThreadLowPriorityForWaitSync()
 {
     // This service calls varjo_WaitSync only to sample IMU/head pose and write a
@@ -102,7 +92,12 @@ VarjoIMUService::VarjoIMUService(
 
 VarjoIMUService::~VarjoIMUService()
 {
-    VTK_SD_LOG("VarjoIMUService destructor running=" << (isRunning() ? "true" : "false"));
+    bool running = false;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        running = running_;
+    }
+    VTK_SD_LOG("VarjoIMUService destructor running=" << (running ? "true" : "false"));
     stop();
 }
 
@@ -160,7 +155,12 @@ bool VarjoIMUService::start(bool waitFillBuffer)
 
 void VarjoIMUService::stop()
 {
-    VTK_SD_LOG("VarjoIMUService::stop running=" << (isRunning() ? "true" : "false"));
+    bool running = false;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        running = running_;
+    }
+    VTK_SD_LOG("VarjoIMUService::stop running=" << (running ? "true" : "false"));
     stop_requested_.store(true);
     if (worker_.joinable()) {
         VTK_SD_LOG("joining VarjoIMUService worker thread");
