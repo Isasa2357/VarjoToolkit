@@ -53,10 +53,10 @@ VARJOTOOLKIT_SUPERDEBUG_TRACE=1
 VARJOTOOLKIT_SUPERDEBUG_SCOPE=1
 ```
 
-## Build
+## Build and test
 
 ```bat
-set "VARJO_SDK_ROOT=C:\work\library\varjo-sdk-experimental"
+set "VARJO_SDK_ROOT=C:\personal\iwatake\Varjo_Experimental_SDK_for_Custom_Engines_4.11.0 (1)\varjo-sdk-experimental"
 set "PATH=%VARJO_SDK_ROOT%\bin;%PATH%"
 
 git fetch origin
@@ -74,8 +74,12 @@ cmake -S . -B out\build\superdebug ^
   -DVARJOTOOLKIT_BUILD_HMD_TESTS=ON ^
   -DVARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS=ON ^
   -DVARJOTOOLKIT_ENABLE_SUPERDEBUG=ON
+if errorlevel 1 exit /b 1
 
 cmake --build out\build\superdebug --config Debug --parallel
+if errorlevel 1 exit /b 1
+
+ctest --test-dir out\build\superdebug -C Debug --output-on-failure
 ```
 
 ## Run HMD tests with SuperDebug output
@@ -139,6 +143,7 @@ VarjoEventCsvLogger
 VarjoMarkerTrackingService
 VarjoMarkerTrackingCsvLogger
 VarjoIMUService
+VarjoVSTService
 ```
 
 ## Implementation notes
