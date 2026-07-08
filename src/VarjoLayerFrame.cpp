@@ -3,10 +3,26 @@
 #include <stdexcept>
 #include <utility>
 
+namespace {
+
+varjo_LayerFlags ResolveLayerFlags(varjo_LayerFlags flags) noexcept
+{
+    // Most VarjoToolkit/VarjoXR use cases are MR overlay layers rendered onto a
+    // transparent render target. Submitting varjo_LayerFlagNone can make the
+    // compositor treat the transparent clear color as an opaque black layer.
+    // Keep explicit non-zero flags untouched, but make the default safe for MR.
+    if (flags == varjo_LayerFlagNone) {
+        return varjo_LayerFlag_BlendMode_AlphaBlend;
+    }
+    return flags;
+}
+
+} // namespace
+
 VarjoMultiProjLayer::VarjoMultiProjLayer(int32_t viewCount, varjo_LayerFlags flags, varjo_Space space)
 {
     layer_.header.type = varjo_LayerMultiProjType;
-    layer_.header.flags = flags;
+    layer_.header.flags = ResolveLayerFlags(flags);
     layer_.space = space;
     resize(viewCount);
 }
@@ -49,7 +65,7 @@ void VarjoMultiProjLayer::resize(int32_t viewCount)
 
 void VarjoMultiProjLayer::setFlags(varjo_LayerFlags flags)
 {
-    layer_.header.flags = flags;
+    layer_.header.flags = ResolveLayerFlags(flags);
 }
 
 void VarjoMultiProjLayer::setSpace(varjo_Space space)
