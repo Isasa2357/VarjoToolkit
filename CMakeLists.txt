@@ -341,4 +341,6 @@ if (VARJOTOOLKIT_BUILD_HMD_TESTS)
     endif()
     add_test(NAME VarjoToolkitCoreSmokeTest COMMAND VarjoToolkitCoreSmokeTest)
     set_tests_properties(VarjoToolkitCoreSmokeTest PROPERTIES LABELS "hmd")
+
+    add_subdirectory(tests/HmdSmokeTests)
 endif()
