@@ -22,7 +22,7 @@ cmake --build out\build\test --config Debug
 ctest --test-dir out\build\test -C Debug --output-on-failure
 ```
 
-`VarjoToolkitCoreSmokeTest` is not registered in this mode.
+`VarjoToolkitCoreSmokeTest` and the HMD smoke test group are not registered in this mode.
 
 ## HMD-required tests
 
@@ -34,10 +34,40 @@ cmake -S . -B out\build\hmd-test ^
   -A x64 ^
   -DVARJO_SDK_ROOT="%VARJO_SDK_ROOT%" ^
   -DVARJOTOOLKIT_BUILD_TESTS=ON ^
-  -DVARJOTOOLKIT_BUILD_HMD_TESTS=ON
+  -DVARJOTOOLKIT_BUILD_HMD_TESTS=ON ^
+  -DVARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS=ON
 
 cmake --build out\build\hmd-test --config Debug
 ctest --test-dir out\build\hmd-test -C Debug -L hmd --output-on-failure
+```
+
+Current HMD tests:
+
+```txt
+VarjoToolkitCoreSmokeTest
+VarjoToolkitHmdOcclusionMeshSmokeTest
+VarjoToolkitHmdEventQueueSmokeTest
+VarjoToolkitHmdWorldMarkerSmokeTest
+VarjoToolkitHmdCameraPropertiesSmokeTest
+VarjoToolkitHmdDataStreamConfigSmokeTest
+VarjoToolkitHmdD3D11SwapChainSmokeTest
+VarjoToolkitHmdD3D12SwapChainSmokeTest
+VarjoToolkitHmdVideoPostProcessD3D11SmokeTest
+VarjoToolkitHmdVideoPostProcessD3D12SmokeTest
+```
+
+The two video post process tests are registered only when `VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS=ON`.
+
+Useful label filters:
+
+```bat
+ctest --test-dir out\build\hmd-test -C Debug -L hmd --output-on-failure
+ctest --test-dir out\build\hmd-test -C Debug -L rendering --output-on-failure
+ctest --test-dir out\build\hmd-test -C Debug -L d3d11 --output-on-failure
+ctest --test-dir out\build\hmd-test -C Debug -L d3d12 --output-on-failure
+ctest --test-dir out\build\hmd-test -C Debug -L vpp --output-on-failure
+ctest --test-dir out\build\hmd-test -C Debug -L mr --output-on-failure
+ctest --test-dir out\build\hmd-test -C Debug -L datastream --output-on-failure
 ```
 
 ## Package consumer test
