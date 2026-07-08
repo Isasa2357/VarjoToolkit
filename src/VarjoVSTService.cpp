@@ -63,6 +63,16 @@ std::string pathForLog(const std::filesystem::path& path)
     return wideToUtf8ForLog(path.wstring());
 }
 
+int64_t channelBits(varjo_ChannelFlag flags)
+{
+    return static_cast<int64_t>(flags);
+}
+
+int64_t channelIndexValue(varjo_ChannelIndex index)
+{
+    return static_cast<int64_t>(index);
+}
+
 bool shouldLogCounter(uint64_t value)
 {
     return value <= 3 || ((value & (value - 1)) == 0);
@@ -181,7 +191,7 @@ bool VarjoVSTService::start()
     VTK_SD_LOG("VarjoVSTService started streamId=" << data_stream_.streamId()
         << " size=" << stream_config_.width << "x" << stream_config_.height
         << " fps=" << stream_config_.frameRate
-        << " channels=" << channel_flags_);
+        << " channels=" << channelBits(channel_flags_));
     return true;
 }
 
@@ -290,7 +300,7 @@ bool VarjoVSTService::selectStreamConfig()
     channel_flags_ = cameraBothEyeChannels();
     VTK_SD_LOG("selected VST stream config size=" << stream_config_.width << "x" << stream_config_.height
         << " fps=" << stream_config_.frameRate
-        << " channels=" << channel_flags_);
+        << " channels=" << channelBits(channel_flags_));
     return true;
 }
 
@@ -397,7 +407,7 @@ void VarjoVSTService::onFrameReceived(const varjo_StreamFrame* frame, varjo_Sess
         return;
     }
     if (frame->type != varjo_StreamType_DistortedColor) {
-        VTK_SD_TRACE("VST frame callback skipped unexpected stream type=" << frame->type);
+        VTK_SD_TRACE("VST frame callback skipped unexpected stream type=" << static_cast<int64_t>(frame->type));
         return;
     }
 
@@ -416,14 +426,14 @@ void VarjoVSTService::captureChannel(
 {
     if ((frame.dataFlags & varjo_DataFlag_Buffer) == 0) {
         VTK_SD_TRACE("VST capture skipped because buffer flag is missing frameNumber=" << frame.frameNumber
-            << " channel=" << channel_index);
+            << " channel=" << channelIndexValue(channel_index));
         return;
     }
 
     const varjo_BufferId buffer_id = varjo_GetBufferId(callback_session, frame.id, frame.frameNumber, channel_index);
     if (buffer_id == varjo_InvalidId) {
         VTK_SD_TRACE("VST capture skipped because varjo_GetBufferId returned invalid id frameNumber=" << frame.frameNumber
-            << " channel=" << channel_index);
+            << " channel=" << channelIndexValue(channel_index));
         return;
     }
 
@@ -444,7 +454,7 @@ void VarjoVSTService::captureChannel(
     if (!buffer_lock) {
         VTK_SD_TRACE("VST capture skipped because buffer lock failed bufferId=" << buffer_id
             << " frameNumber=" << frame.frameNumber
-            << " channel=" << channel_index);
+            << " channel=" << channelIndexValue(channel_index));
         return;
     }
 
@@ -461,8 +471,8 @@ void VarjoVSTService::captureChannel(
         pushCapturedFrame(std::move(captured));
     } else {
         VTK_SD_TRACE("VST capture skipped because CPU buffer data is empty frameNumber=" << frame.frameNumber
-            << " channel=" << channel_index
-            << " bufferType=" << captured.buffer_metadata.type
+            << " channel=" << channelIndexValue(channel_index)
+            << " bufferType=" << static_cast<int64_t>(captured.buffer_metadata.type)
             << " byteSize=" << captured.buffer_metadata.byteSize);
     }
 }
