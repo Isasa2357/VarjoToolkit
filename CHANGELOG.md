@@ -8,7 +8,8 @@
   - Added `VARJOTOOLKIT_ENABLE_SUPERDEBUG` CMake option.
   - Enables `VARJOTOOLKIT_SUPERDEBUG=1` only for Debug configuration when the option is ON.
   - Added header-only diagnostics macros in `VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp`.
-  - Added console SuperDebug logging to session, frame info, event queue, data stream, world, occlusion mesh, swapchain, layer frame, and video post process wrappers.
+  - Added console SuperDebug logging to session, frame info, scoped locks, event queue, data stream, stream buffer lock, chroma key, world, marker tracker, occlusion mesh, swapchain, layer frame, and video post process wrappers.
+  - Added console SuperDebug logging to event and marker tracking services, including CSV open/write/close, worker lifecycle, queue overflow, and request/drain operations.
   - Added `docs/SUPERDEBUG.md`.
 - Expanded HMD smoke test suite under `VARJOTOOLKIT_BUILD_HMD_TESTS`.
   - Added occlusion mesh, event queue, world/marker, MR camera property, data stream config, D3D11 swapchain, and D3D12 swapchain HMD tests.
