@@ -1,4 +1,5 @@
 #include <VarjoToolkit/DataStream/VarjoDataStream.hpp>
+#include <VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp>
 
 #include <cstdint>
 #include <utility>
@@ -15,16 +16,33 @@ varjo_ChannelFlag channelIntersection(varjo_ChannelFlag a, varjo_ChannelFlag b)
     return static_cast<varjo_ChannelFlag>(channelBits(a) & channelBits(b));
 }
 
+void logStreamConfig(const char* label, const varjo_StreamConfig& config)
+{
+    VTK_SD_LOG(label
+        << " streamId=" << config.streamId
+        << " streamType=" << static_cast<int64_t>(config.streamType)
+        << " channelFlags=" << static_cast<int64_t>(config.channelFlags)
+        << " bufferType=" << static_cast<int64_t>(config.bufferType)
+        << " format=" << static_cast<int64_t>(config.format)
+        << " width=" << config.width
+        << " height=" << config.height
+        << " frameRate=" << config.frameRate);
+}
+
 } // namespace
 
 VarjoDataStream::VarjoDataStream(varjo_Session* session)
     : session_(session)
-{}
+{
+    VTK_SD_LOG("VarjoDataStream raw constructor session=" << session_);
+}
 
 VarjoDataStream::VarjoDataStream(std::shared_ptr<varjo_Session> session)
     : session_owner_(std::move(session))
     , session_(session_owner_.get())
-{}
+{
+    VTK_SD_LOG("VarjoDataStream shared constructor session=" << session_);
+}
 
 VarjoDataStream::VarjoDataStream(const VarjoSession& session)
     : VarjoDataStream(session.shared())
@@ -32,6 +50,7 @@ VarjoDataStream::VarjoDataStream(const VarjoSession& session)
 
 VarjoDataStream::~VarjoDataStream()
 {
+    VTK_SD_LOG("VarjoDataStream destructor running=" << (running() ? "true" : "false"));
     stop();
 }
 
@@ -57,17 +76,23 @@ bool VarjoDataStream::ownsSession() const
 
 std::vector<varjo_StreamConfig> VarjoDataStream::enumerateConfigs() const
 {
+    VTK_SD_SCOPE("VarjoDataStream::enumerateConfigs");
     if (!session_) {
+        VTK_SD_ERROR("enumerateConfigs called with null session");
         return {};
     }
 
     const int32_t config_count = varjo_GetDataStreamConfigCount(session_);
+    VTK_SD_LOG("data stream config count=" << config_count);
     if (config_count <= 0) {
         return {};
     }
 
     std::vector<varjo_StreamConfig> configs(static_cast<size_t>(config_count));
     varjo_GetDataStreamConfigs(session_, configs.data(), config_count);
+    for (size_t i = 0; i < configs.size(); ++i) {
+        logStreamConfig((std::string("config[") + std::to_string(i) + "]").c_str(), configs[i]);
+    }
     return configs;
 }
 
@@ -100,11 +125,17 @@ int64_t VarjoDataStream::configScore(const varjo_StreamConfig& config, const Con
     if (request.preferLargerResolution) {
         score += static_cast<int64_t>(config.width) * static_cast<int64_t>(config.height);
     }
+    VTK_SD_TRACE("configScore streamId=" << config.streamId << " score=" << score);
     return score;
 }
 
 std::optional<varjo_StreamConfig> VarjoDataStream::findBestConfig(const ConfigRequest& request) const
 {
+    VTK_SD_SCOPE("VarjoDataStream::findBestConfig");
+    VTK_SD_LOG("request streamType=" << static_cast<int64_t>(request.streamType)
+        << " formatSet=" << (request.format.has_value() ? "true" : "false")
+        << " bufferTypeSet=" << (request.bufferType.has_value() ? "true" : "false")
+        << " requiredChannels=" << static_cast<int64_t>(request.requiredChannels));
     const auto configs = enumerateConfigs();
     std::optional<varjo_StreamConfig> best;
     int64_t best_score = 0;
@@ -121,11 +152,19 @@ std::optional<varjo_StreamConfig> VarjoDataStream::findBestConfig(const ConfigRe
         }
     }
 
+    if (best.has_value()) {
+        logStreamConfig("bestConfig", best.value());
+    } else {
+        VTK_SD_WARN("no matching data stream config found");
+    }
     return best;
 }
 
 bool VarjoDataStream::start(const varjo_StreamConfig& config, varjo_ChannelFlag channels, Callback callback)
 {
+    VTK_SD_SCOPE("VarjoDataStream::start");
+    logStreamConfig("start requested", config);
+    VTK_SD_LOG("requestedChannels=" << static_cast<int64_t>(channels));
     stop();
 
     if (!session_) {
@@ -164,6 +203,7 @@ bool VarjoDataStream::start(const varjo_StreamConfig& config, varjo_ChannelFlag 
         last_error_.clear();
     }
 
+    VTK_SD_LOG("varjo_StartDataStream streamId=" << stream_id_ << " channelFlags=" << static_cast<int64_t>(channel_flags_));
     varjo_StartDataStream(
         session_,
         stream_id_,
@@ -186,6 +226,7 @@ bool VarjoDataStream::startBest(const ConfigRequest& request, Callback callback)
 
 bool VarjoDataStream::startBest(const ConfigRequest& request, varjo_ChannelFlag channels, Callback callback)
 {
+    VTK_SD_SCOPE("VarjoDataStream::startBest");
     auto config = findBestConfig(request);
     if (!config.has_value()) {
         setLastError("no matching data stream config was found");
@@ -205,6 +246,7 @@ bool VarjoDataStream::startBest(const ConfigRequest& request, varjo_ChannelFlag 
         }
     }
 
+    VTK_SD_LOG("startBest resolvedChannels=" << static_cast<int64_t>(start_channels));
     return start(config.value(), start_channels, std::move(callback));
 }
 
@@ -226,6 +268,7 @@ void VarjoDataStream::stop()
     }
 
     if (session_to_stop && stream_to_stop != varjo_InvalidId) {
+        VTK_SD_LOG("varjo_StopDataStream streamId=" << stream_to_stop);
         varjo_StopDataStream(session_to_stop, stream_to_stop);
     }
 
@@ -272,6 +315,7 @@ void VarjoDataStream::onFrameReceivedStatic(
 {
     auto* self = static_cast<VarjoDataStream*>(user_data);
     if (!self) {
+        VTK_SD_ERROR("onFrameReceivedStatic called with null user_data");
         return;
     }
     self->dispatchFrame(frame, session);
@@ -283,6 +327,7 @@ void VarjoDataStream::dispatchFrame(const varjo_StreamFrame* frame, varjo_Sessio
     {
         std::lock_guard<std::mutex> state_lock(state_mutex_);
         if (!running_) {
+            VTK_SD_TRACE("dispatchFrame ignored because stream is not running");
             return;
         }
     }
@@ -292,7 +337,10 @@ void VarjoDataStream::dispatchFrame(const varjo_StreamFrame* frame, varjo_Sessio
     }
 
     if (callback) {
+        VTK_SD_TRACE("dispatchFrame frame=" << frame << " callbackSession=" << callback_session);
         callback(frame, callback_session);
+    } else {
+        VTK_SD_WARN("dispatchFrame has no callback");
     }
 }
 
@@ -300,6 +348,7 @@ void VarjoDataStream::setLastError(std::string message)
 {
     std::lock_guard<std::mutex> lock(state_mutex_);
     last_error_ = std::move(message);
+    VTK_SD_ERROR(last_error_);
 }
 
 bool VarjoDataStream::hasAnyChannels(varjo_ChannelFlag flags, varjo_ChannelFlag required)

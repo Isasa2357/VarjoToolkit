@@ -5,6 +5,7 @@
 #include <VarjoToolkit/Services/IMU/VarjoIMUService.hpp>
 
 #include <VarjoToolkit/Core/VarjoFrameInfo.hpp>
+#include <VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp>
 #include <VarjoToolkit/Utilities/VarjoCsv.hpp>
 
 #include <Windows.h>
@@ -83,26 +84,39 @@ VarjoIMUService::VarjoIMUService(
     : session_(session)
     , csv_output_path_(csv_output_path)
     , buffer_capacity_((buffer_capacity > min_buffer_capacity_) ? buffer_capacity : min_buffer_capacity_)
-{}
+{
+    VTK_SD_LOG("VarjoIMUService constructor session=" << session_.get()
+        << " csv=" << csv_output_path_.string()
+        << " bufferCapacity=" << buffer_capacity_);
+}
 
 VarjoIMUService::~VarjoIMUService()
 {
+    bool running = false;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        running = running_;
+    }
+    VTK_SD_LOG("VarjoIMUService destructor running=" << (running ? "true" : "false"));
     stop();
 }
 
 bool VarjoIMUService::start(bool waitFillBuffer)
 {
+    VTK_SD_LOG("VarjoIMUService::start waitFillBuffer=" << (waitFillBuffer ? "true" : "false"));
     stop();
 
     if (varjo_IsAvailable() == varjo_False) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         last_error_ = L"varjo_IsAvailable returned false";
+        VTK_SD_ERROR("VarjoIMUService start failed: varjo_IsAvailable returned false");
         return false;
     }
 
     if (!session_) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         last_error_ = L"session is null";
+        VTK_SD_ERROR("VarjoIMUService start failed: session is null");
         return false;
     }
 
@@ -126,11 +140,14 @@ bool VarjoIMUService::start(bool waitFillBuffer)
     stop_requested_.store(false);
     worker_ = std::thread(&VarjoIMUService::workerMain, this);
     SetThreadPriority(static_cast<HANDLE>(worker_.native_handle()), THREAD_PRIORITY_LOWEST);
+    VTK_SD_LOG("VarjoIMUService worker thread started bufferCapacity=" << buffer_capacity_);
 
     if (waitFillBuffer) {
+        VTK_SD_LOG("VarjoIMUService waiting for buffer fill target=" << bufferCapacity());
         while (!stop_requested_.load() && bufferSize() < bufferCapacity()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
+        VTK_SD_LOG("VarjoIMUService buffer fill wait completed size=" << bufferSize());
     }
 
     return true;
@@ -138,8 +155,15 @@ bool VarjoIMUService::start(bool waitFillBuffer)
 
 void VarjoIMUService::stop()
 {
+    bool running = false;
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        running = running_;
+    }
+    VTK_SD_LOG("VarjoIMUService::stop running=" << (running ? "true" : "false"));
     stop_requested_.store(true);
     if (worker_.joinable()) {
+        VTK_SD_LOG("joining VarjoIMUService worker thread");
         worker_.join();
     }
 
@@ -184,16 +208,19 @@ VarjoIMUService::VarjoIMUData VarjoIMUService::latestData() const
 std::deque<VarjoIMUService::VarjoIMUData> VarjoIMUService::requestBufferedData() const
 {
     std::lock_guard<std::mutex> lock(imu_buffer_mutex_);
+    VTK_SD_LOG("VarjoIMUService::requestBufferedData size=" << imu_buffer_.size());
     return imu_buffer_;
 }
 
 bool VarjoIMUService::openLogFile()
 {
+    VTK_SD_LOG("VarjoIMUService::openLogFile path=" << csv_output_path_.string());
     closeLogFile();
 
     if (csv_output_path_.empty()) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         last_error_ = L"CSV output path is empty";
+        VTK_SD_ERROR("VarjoIMUService openLogFile failed: CSV output path is empty");
         return false;
     }
 
@@ -201,6 +228,9 @@ bool VarjoIMUService::openLogFile()
     if (!parent.empty()) {
         std::error_code ec;
         std::filesystem::create_directories(parent, ec);
+        if (ec) {
+            VTK_SD_WARN("create_directories failed path=" << parent.string() << " message=" << ec.message());
+        }
     }
 
     {
@@ -209,11 +239,13 @@ bool VarjoIMUService::openLogFile()
         if (!logfile_.is_open()) {
             std::lock_guard<std::mutex> state_lock(state_mutex_);
             last_error_ = L"failed to open IMU CSV: " + csv_output_path_.wstring();
+            VTK_SD_ERROR("failed to open IMU CSV path=" << csv_output_path_.string());
             return false;
         }
         writeHeader();
     }
 
+    VTK_SD_LOG("IMU CSV opened path=" << csv_output_path_.string());
     return true;
 }
 
@@ -221,6 +253,7 @@ void VarjoIMUService::closeLogFile()
 {
     std::lock_guard<std::mutex> lock(log_mutex_);
     if (logfile_.is_open()) {
+        VTK_SD_LOG("closing IMU CSV path=" << csv_output_path_.string());
         logfile_.flush();
         logfile_.close();
     }
@@ -252,6 +285,7 @@ void VarjoIMUService::writeRow(const VarjoIMUData& data)
 {
     std::lock_guard<std::mutex> lock(log_mutex_);
     if (!logfile_.is_open()) {
+        VTK_SD_WARN("writeRow skipped because IMU CSV is not open");
         return;
     }
 
@@ -282,6 +316,7 @@ VarjoIMUService::VarjoIMUData VarjoIMUService::sampleOnce()
 {
     VarjoIMUData data{};
     if (!session_) {
+        VTK_SD_ERROR("VarjoIMUService::sampleOnce called with null session");
         return data;
     }
 
@@ -289,6 +324,7 @@ VarjoIMUService::VarjoIMUData VarjoIMUService::sampleOnce()
     if (!frame_info) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         last_error_ = L"VarjoFrameInfo failed to create varjo_FrameInfo";
+        VTK_SD_ERROR("VarjoIMUService sampleOnce failed: VarjoFrameInfo creation failed");
         return data;
     }
 
@@ -300,6 +336,7 @@ VarjoIMUService::VarjoIMUData VarjoIMUService::sampleOnce()
     if (!frame_info.waitSync()) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         last_error_ = L"VarjoFrameInfo::waitSync failed";
+        VTK_SD_ERROR("VarjoIMUService sampleOnce failed: waitSync failed");
         return data;
     }
 
@@ -345,11 +382,13 @@ VarjoIMUService::VarjoIMUData VarjoIMUService::sampleOnce()
 
 void VarjoIMUService::workerMain()
 {
+    VTK_SD_LOG("VarjoIMUService worker started");
     setCurrentThreadLowPriorityForWaitSync();
 
     while (!stop_requested_.load()) {
         const VarjoIMUData data = sampleOnce();
         if (!data.valid) {
+            VTK_SD_TRACE("VarjoIMUService invalid sample; sleeping briefly");
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
@@ -370,4 +409,6 @@ void VarjoIMUService::workerMain()
             ++row_count_;
         }
     }
+
+    VTK_SD_LOG("VarjoIMUService worker stopped rowCount=" << rowCount() << " bufferSize=" << bufferSize());
 }

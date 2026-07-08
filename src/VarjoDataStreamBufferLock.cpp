@@ -1,4 +1,5 @@
 #include <VarjoToolkit/DataStream/VarjoDataStreamBufferLock.hpp>
+#include <VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp>
 
 #include <utility>
 
@@ -6,6 +7,7 @@ VarjoDataStreamBufferLock::VarjoDataStreamBufferLock(varjo_Session* session, var
     : session_(session)
     , buffer_id_(buffer_id)
 {
+    VTK_SD_LOG("VarjoDataStreamBufferLock raw constructor session=" << session_ << " bufferId=" << buffer_id_);
     lock();
 }
 
@@ -14,6 +16,7 @@ VarjoDataStreamBufferLock::VarjoDataStreamBufferLock(std::shared_ptr<varjo_Sessi
     , session_(session_owner_.get())
     , buffer_id_(buffer_id)
 {
+    VTK_SD_LOG("VarjoDataStreamBufferLock shared constructor session=" << session_ << " bufferId=" << buffer_id_);
     lock();
 }
 
@@ -23,6 +26,7 @@ VarjoDataStreamBufferLock::VarjoDataStreamBufferLock(const VarjoSession& session
 
 VarjoDataStreamBufferLock::~VarjoDataStreamBufferLock()
 {
+    VTK_SD_LOG("VarjoDataStreamBufferLock destructor locked=" << (locked_ ? "true" : "false") << " bufferId=" << buffer_id_);
     unlock();
 }
 
@@ -31,16 +35,20 @@ VarjoDataStreamBufferLock::VarjoDataStreamBufferLock(VarjoDataStreamBufferLock&&
     , session_(std::exchange(other.session_, nullptr))
     , buffer_id_(std::exchange(other.buffer_id_, varjo_InvalidId))
     , locked_(std::exchange(other.locked_, false))
-{}
+{
+    VTK_SD_LOG("VarjoDataStreamBufferLock move constructor session=" << session_ << " bufferId=" << buffer_id_ << " locked=" << (locked_ ? "true" : "false"));
+}
 
 VarjoDataStreamBufferLock& VarjoDataStreamBufferLock::operator=(VarjoDataStreamBufferLock&& other) noexcept
 {
     if (this != &other) {
+        VTK_SD_LOG("VarjoDataStreamBufferLock move assignment releasing current locked=" << (locked_ ? "true" : "false"));
         unlock();
         session_owner_ = std::move(other.session_owner_);
         session_ = std::exchange(other.session_, nullptr);
         buffer_id_ = std::exchange(other.buffer_id_, varjo_InvalidId);
         locked_ = std::exchange(other.locked_, false);
+        VTK_SD_LOG("VarjoDataStreamBufferLock move assignment new session=" << session_ << " bufferId=" << buffer_id_ << " locked=" << (locked_ ? "true" : "false"));
     }
     return *this;
 }
@@ -73,30 +81,39 @@ varjo_BufferId VarjoDataStreamBufferLock::bufferId() const
 varjo_BufferMetadata VarjoDataStreamBufferLock::metadata() const
 {
     if (!locked_) {
+        VTK_SD_WARN("metadata requested while buffer is not locked");
         return varjo_BufferMetadata{};
     }
+    VTK_SD_TRACE("varjo_GetBufferMetadata bufferId=" << buffer_id_);
     return varjo_GetBufferMetadata(session_, buffer_id_);
 }
 
 const void* VarjoDataStreamBufferLock::cpuData() const
 {
     if (!locked_) {
+        VTK_SD_WARN("const cpuData requested while buffer is not locked");
         return nullptr;
     }
-    return varjo_GetBufferCPUData(session_, buffer_id_);
+    const void* data = varjo_GetBufferCPUData(session_, buffer_id_);
+    VTK_SD_TRACE("const cpuData bufferId=" << buffer_id_ << " data=" << data);
+    return data;
 }
 
 void* VarjoDataStreamBufferLock::cpuData()
 {
     if (!locked_) {
+        VTK_SD_WARN("cpuData requested while buffer is not locked");
         return nullptr;
     }
-    return varjo_GetBufferCPUData(session_, buffer_id_);
+    void* data = varjo_GetBufferCPUData(session_, buffer_id_);
+    VTK_SD_TRACE("cpuData bufferId=" << buffer_id_ << " data=" << data);
+    return data;
 }
 
 void VarjoDataStreamBufferLock::unlock()
 {
     if (locked_) {
+        VTK_SD_LOG("varjo_UnlockDataStreamBuffer bufferId=" << buffer_id_);
         varjo_UnlockDataStreamBuffer(session_, buffer_id_);
         locked_ = false;
     }
@@ -108,9 +125,11 @@ void VarjoDataStreamBufferLock::unlock()
 void VarjoDataStreamBufferLock::lock()
 {
     if (!session_ || buffer_id_ == varjo_InvalidId) {
+        VTK_SD_WARN("lock skipped session=" << session_ << " bufferId=" << buffer_id_);
         return;
     }
 
+    VTK_SD_LOG("varjo_LockDataStreamBuffer bufferId=" << buffer_id_);
     varjo_LockDataStreamBuffer(session_, buffer_id_);
     locked_ = true;
 }

@@ -1,5 +1,6 @@
 #include <VarjoToolkit/Services/MarkerTracking/VarjoMarkerTrackingService.hpp>
 
+#include <VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp>
 #include <VarjoToolkit/Utilities/VarjoCsv.hpp>
 
 #include <chrono>
@@ -27,7 +28,9 @@ std::string emptyPoseCsv()
 
 VarjoMarkerTrackingCsvLogger::VarjoMarkerTrackingCsvLogger(std::filesystem::path filepath)
     : filepath_(std::move(filepath))
-{}
+{
+    VTK_SD_LOG("VarjoMarkerTrackingCsvLogger filepath=" << filepath_.string());
+}
 
 VarjoMarkerTrackingCsvLogger::~VarjoMarkerTrackingCsvLogger()
 {
@@ -36,6 +39,8 @@ VarjoMarkerTrackingCsvLogger::~VarjoMarkerTrackingCsvLogger()
 
 bool VarjoMarkerTrackingCsvLogger::open()
 {
+    VTK_SD_SCOPE("VarjoMarkerTrackingCsvLogger::open");
+    VTK_SD_LOG("opening marker CSV filepath=" << filepath_.string());
     if (file_.is_open()) {
         setLastError("marker CSV is already open");
         return false;
@@ -47,6 +52,7 @@ bool VarjoMarkerTrackingCsvLogger::open()
         std::filesystem::create_directories(parent, ec);
         if (ec) {
             setLastError("failed to create marker CSV output directory");
+            VTK_SD_ERROR("create_directories failed path=" << parent.string() << " message=" << ec.message());
             return false;
         }
     }
@@ -59,12 +65,14 @@ bool VarjoMarkerTrackingCsvLogger::open()
 
     file_ << header();
     last_error_.clear();
+    VTK_SD_LOG("marker CSV opened filepath=" << filepath_.string());
     return true;
 }
 
 void VarjoMarkerTrackingCsvLogger::close()
 {
     if (file_.is_open()) {
+        VTK_SD_LOG("closing marker CSV filepath=" << filepath_.string());
         file_.flush();
         file_.close();
     }
@@ -78,7 +86,12 @@ bool VarjoMarkerTrackingCsvLogger::isOpen() const
 void VarjoMarkerTrackingCsvLogger::write(const VarjoMarkerTrackingRecord& record)
 {
     if (file_.is_open()) {
+        VTK_SD_TRACE("write marker CSV row=" << record.rowIndex << " sampleTimestamp=" << record.sampleTimestamp
+            << " hasMarker=" << (record.marker.hasMarker ? "true" : "false")
+            << " hasPose=" << (record.marker.hasPose ? "true" : "false"));
         file_ << row(record);
+    } else {
+        VTK_SD_WARN("marker CSV write skipped because file is not open");
     }
 }
 
@@ -145,6 +158,7 @@ std::string VarjoMarkerTrackingCsvLogger::poseToCsv(const varjo_WorldPoseCompone
 void VarjoMarkerTrackingCsvLogger::setLastError(std::string message) const
 {
     last_error_ = std::move(message);
+    VTK_SD_ERROR(last_error_);
 }
 
 VarjoMarkerTrackingService::VarjoMarkerTrackingService(
@@ -157,16 +171,23 @@ VarjoMarkerTrackingService::VarjoMarkerTrackingService(
     , logger_(std::move(filepath))
     , queue_size_(queueSize)
     , sample_interval_ms_(sampleIntervalMs < 0 ? 0 : sampleIntervalMs)
-{}
+{
+    VTK_SD_LOG("VarjoMarkerTrackingService constructor session=" << session_.get()
+        << " queueSize=" << queue_size_
+        << " sampleIntervalMs=" << sample_interval_ms_);
+}
 
 VarjoMarkerTrackingService::~VarjoMarkerTrackingService()
 {
+    VTK_SD_LOG("VarjoMarkerTrackingService destructor running=" << (running_.load() ? "true" : "false"));
     stop();
 }
 
 bool VarjoMarkerTrackingService::start()
 {
+    VTK_SD_SCOPE("VarjoMarkerTrackingService::start");
     if (running_.load()) {
+        VTK_SD_LOG("marker tracking service already running");
         return true;
     }
     if (!session_) {
@@ -184,6 +205,7 @@ bool VarjoMarkerTrackingService::start()
 
     stop_signal_.store(false);
     running_.store(true);
+    VTK_SD_LOG("starting marker tracking service worker thread");
     thread_ = std::thread(&VarjoMarkerTrackingService::worker, this);
     last_error_.clear();
     return true;
@@ -191,8 +213,10 @@ bool VarjoMarkerTrackingService::start()
 
 void VarjoMarkerTrackingService::stop()
 {
+    VTK_SD_LOG("VarjoMarkerTrackingService::stop running=" << (running_.load() ? "true" : "false"));
     stop_signal_.store(true);
     if (thread_.joinable()) {
+        VTK_SD_LOG("joining marker tracking worker thread");
         thread_.join();
     }
     running_.store(false);
@@ -209,6 +233,7 @@ std::deque<VarjoMarkerTrackingRecord> VarjoMarkerTrackingService::requestMarkers
     std::deque<VarjoMarkerTrackingRecord> out;
     std::lock_guard<std::mutex> lock(mutex_);
     out.swap(queue_);
+    VTK_SD_LOG("requestMarkers returned=" << out.size());
     return out;
 }
 
@@ -224,10 +249,12 @@ const std::string& VarjoMarkerTrackingService::lastError() const
 
 void VarjoMarkerTrackingService::worker()
 {
+    VTK_SD_LOG("marker tracking service worker started");
     while (!stop_signal_.load()) {
         const varjo_Nanoseconds sampleTimestamp = varjo_GetCurrentTime(session_.get());
         const auto markers = marker_tracker_.markers(sampleTimestamp, true);
         if (!markers.empty()) {
+            VTK_SD_LOG("marker tracking service sampled markers=" << markers.size() << " timestamp=" << sampleTimestamp);
             std::lock_guard<std::mutex> lock(mutex_);
             for (const auto& marker : markers) {
                 VarjoMarkerTrackingRecord record{};
@@ -238,6 +265,7 @@ void VarjoMarkerTrackingService::worker()
                 logger_.write(record);
                 queue_.push_back(record);
                 while (queue_.size() > queue_size_) {
+                    VTK_SD_TRACE("marker queue over capacity size=" << queue_.size() << " limit=" << queue_size_);
                     queue_.pop_front();
                 }
             }
@@ -249,9 +277,11 @@ void VarjoMarkerTrackingService::worker()
             std::this_thread::yield();
         }
     }
+    VTK_SD_LOG("marker tracking service worker stopped rowCount=" << row_count_.load());
 }
 
 void VarjoMarkerTrackingService::setLastError(std::string message) const
 {
     last_error_ = std::move(message);
+    VTK_SD_ERROR(last_error_);
 }

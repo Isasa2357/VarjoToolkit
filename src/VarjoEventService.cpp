@@ -1,5 +1,6 @@
 #include <VarjoToolkit/Services/Event/VarjoEventService.hpp>
 
+#include <VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp>
 #include <VarjoToolkit/Utilities/VarjoCsv.hpp>
 
 #include <chrono>
@@ -7,7 +8,9 @@
 
 VarjoEventCsvLogger::VarjoEventCsvLogger(std::filesystem::path filepath)
     : filepath_(std::move(filepath))
-{}
+{
+    VTK_SD_LOG("VarjoEventCsvLogger filepath=" << filepath_.string());
+}
 
 VarjoEventCsvLogger::~VarjoEventCsvLogger()
 {
@@ -16,6 +19,8 @@ VarjoEventCsvLogger::~VarjoEventCsvLogger()
 
 bool VarjoEventCsvLogger::open()
 {
+    VTK_SD_SCOPE("VarjoEventCsvLogger::open");
+    VTK_SD_LOG("opening event CSV filepath=" << filepath_.string());
     if (file_.is_open()) {
         setLastError("event CSV is already open");
         return false;
@@ -27,6 +32,7 @@ bool VarjoEventCsvLogger::open()
         std::filesystem::create_directories(parent, ec);
         if (ec) {
             setLastError("failed to create event CSV output directory");
+            VTK_SD_ERROR("create_directories failed path=" << parent.string() << " message=" << ec.message());
             return false;
         }
     }
@@ -39,12 +45,14 @@ bool VarjoEventCsvLogger::open()
 
     file_ << header();
     last_error_.clear();
+    VTK_SD_LOG("event CSV opened filepath=" << filepath_.string());
     return true;
 }
 
 void VarjoEventCsvLogger::close()
 {
     if (file_.is_open()) {
+        VTK_SD_LOG("closing event CSV filepath=" << filepath_.string());
         file_.flush();
         file_.close();
     }
@@ -58,7 +66,10 @@ bool VarjoEventCsvLogger::isOpen() const
 void VarjoEventCsvLogger::write(const VarjoEventRecord& record)
 {
     if (file_.is_open()) {
+        VTK_SD_TRACE("write event CSV row=" << record.rowIndex << " type=" << record.eventTypeName);
         file_ << row(record);
+    } else {
+        VTK_SD_WARN("event CSV write skipped because file is not open");
     }
 }
 
@@ -93,6 +104,7 @@ std::string VarjoEventCsvLogger::row(const VarjoEventRecord& record)
 void VarjoEventCsvLogger::setLastError(std::string message) const
 {
     last_error_ = std::move(message);
+    VTK_SD_ERROR(last_error_);
 }
 
 VarjoEventService::VarjoEventService(
@@ -107,16 +119,24 @@ VarjoEventService::VarjoEventService(
     , queue_size_(queueSize)
     , poll_interval_ms_(pollIntervalMs < 0 ? 0 : pollIntervalMs)
     , max_events_per_poll_(maxEventsPerPoll == 0 ? 1 : maxEventsPerPoll)
-{}
+{
+    VTK_SD_LOG("VarjoEventService constructor session=" << session_.get()
+        << " queueSize=" << queue_size_
+        << " pollIntervalMs=" << poll_interval_ms_
+        << " maxEventsPerPoll=" << max_events_per_poll_);
+}
 
 VarjoEventService::~VarjoEventService()
 {
+    VTK_SD_LOG("VarjoEventService destructor running=" << (running_.load() ? "true" : "false"));
     stop();
 }
 
 bool VarjoEventService::start()
 {
+    VTK_SD_SCOPE("VarjoEventService::start");
     if (running_.load()) {
+        VTK_SD_LOG("event service already running");
         return true;
     }
     if (!session_) {
@@ -134,6 +154,7 @@ bool VarjoEventService::start()
 
     stop_signal_.store(false);
     running_.store(true);
+    VTK_SD_LOG("starting event service worker thread");
     thread_ = std::thread(&VarjoEventService::worker, this);
     last_error_.clear();
     return true;
@@ -141,8 +162,10 @@ bool VarjoEventService::start()
 
 void VarjoEventService::stop()
 {
+    VTK_SD_LOG("VarjoEventService::stop running=" << (running_.load() ? "true" : "false"));
     stop_signal_.store(true);
     if (thread_.joinable()) {
+        VTK_SD_LOG("joining event service worker thread");
         thread_.join();
     }
     running_.store(false);
@@ -159,6 +182,7 @@ std::deque<VarjoEventRecord> VarjoEventService::requestEvents()
     std::deque<VarjoEventRecord> out;
     std::lock_guard<std::mutex> lock(mutex_);
     out.swap(queue_);
+    VTK_SD_LOG("requestEvents returned=" << out.size());
     return out;
 }
 
@@ -174,9 +198,11 @@ const std::string& VarjoEventService::lastError() const
 
 void VarjoEventService::worker()
 {
+    VTK_SD_LOG("event service worker started");
     while (!stop_signal_.load()) {
         const auto events = event_queue_.pollAll(max_events_per_poll_);
         if (!events.empty()) {
+            VTK_SD_LOG("event service polled events=" << events.size());
             std::lock_guard<std::mutex> lock(mutex_);
             for (const auto& event : events) {
                 VarjoEventRecord record{};
@@ -187,6 +213,7 @@ void VarjoEventService::worker()
                 logger_.write(record);
                 queue_.push_back(record);
                 while (queue_.size() > queue_size_) {
+                    VTK_SD_TRACE("event queue over capacity size=" << queue_.size() << " limit=" << queue_size_);
                     queue_.pop_front();
                 }
             }
@@ -198,9 +225,11 @@ void VarjoEventService::worker()
             std::this_thread::yield();
         }
     }
+    VTK_SD_LOG("event service worker stopped rowCount=" << row_count_.load());
 }
 
 void VarjoEventService::setLastError(std::string message) const
 {
     last_error_ = std::move(message);
+    VTK_SD_ERROR(last_error_);
 }

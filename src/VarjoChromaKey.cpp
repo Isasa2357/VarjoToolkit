@@ -1,6 +1,7 @@
 #include <VarjoToolkit/MR/VarjoChromaKey.hpp>
 
 #include <VarjoToolkit/Core/VarjoScopedLock.hpp>
+#include <VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp>
 
 #include <algorithm>
 #include <iomanip>
@@ -26,12 +27,16 @@ std::string tripleToString(const double values[3])
 
 VarjoChromaKey::VarjoChromaKey(varjo_Session* session)
     : session_(session)
-{}
+{
+    VTK_SD_LOG("VarjoChromaKey raw constructor session=" << session_);
+}
 
 VarjoChromaKey::VarjoChromaKey(std::shared_ptr<varjo_Session> session)
     : session_owner_(std::move(session))
     , session_(session_owner_.get())
-{}
+{
+    VTK_SD_LOG("VarjoChromaKey shared constructor session=" << session_);
+}
 
 VarjoChromaKey::VarjoChromaKey(const VarjoSession& session)
     : VarjoChromaKey(session.shared())
@@ -59,6 +64,7 @@ bool VarjoChromaKey::ownsSession() const
 
 void VarjoChromaKey::setEnabled(bool enabled)
 {
+    VTK_SD_LOG("varjo_MRSetChromaKey enabled=" << (enabled ? "true" : "false"));
     if (!session_) {
         setLastError("session is null");
         return;
@@ -70,6 +76,7 @@ void VarjoChromaKey::setEnabled(bool enabled)
 
 void VarjoChromaKey::setGlobalEnabled(bool enabled)
 {
+    VTK_SD_LOG("varjo_MRSetChromaKeyGlobal enabled=" << (enabled ? "true" : "false"));
     if (!session_) {
         setLastError("session is null");
         return;
@@ -82,9 +89,12 @@ void VarjoChromaKey::setGlobalEnabled(bool enabled)
 int32_t VarjoChromaKey::configCount() const
 {
     if (!session_) {
+        VTK_SD_WARN("configCount requested with null session");
         return 0;
     }
-    return varjo_MRGetChromaKeyConfigCount(session_);
+    const auto count = varjo_MRGetChromaKeyConfigCount(session_);
+    VTK_SD_LOG("chroma key config count=" << count);
+    return count;
 }
 
 std::vector<varjo_ChromaKeyConfig> VarjoChromaKey::getConfigs() const
@@ -99,6 +109,7 @@ std::vector<varjo_ChromaKeyConfig> VarjoChromaKey::getConfigs() const
     for (int32_t i = 0; i < count; ++i) {
         out.push_back(getConfig(i));
     }
+    VTK_SD_LOG("getConfigs returned count=" << out.size());
     return out;
 }
 
@@ -107,11 +118,14 @@ varjo_ChromaKeyConfig VarjoChromaKey::getConfig(int32_t index) const
     if (!session_ || !validateIndex(index)) {
         return makeDisabledConfig();
     }
-    return varjo_MRGetChromaKeyConfig(session_, index);
+    auto config = varjo_MRGetChromaKeyConfig(session_, index);
+    VTK_SD_LOG("getConfig index=" << index << " config=" << configToString(config));
+    return config;
 }
 
 bool VarjoChromaKey::setConfig(int32_t index, const varjo_ChromaKeyConfig& config)
 {
+    VTK_SD_LOG("setConfig index=" << index << " config=" << configToString(config));
     if (!session_) {
         setLastError("session is null");
         return false;
@@ -131,6 +145,7 @@ bool VarjoChromaKey::setConfig(int32_t index, const varjo_ChromaKeyConfig& confi
 
 bool VarjoChromaKey::setConfigs(const std::vector<varjo_ChromaKeyConfig>& configs)
 {
+    VTK_SD_LOG("setConfigs requested count=" << configs.size());
     if (!session_) {
         setLastError("session is null");
         return false;
@@ -169,11 +184,13 @@ bool VarjoChromaKey::setConfigs(const std::vector<varjo_ChromaKeyConfig>& config
 
 bool VarjoChromaKey::disableConfig(int32_t index)
 {
+    VTK_SD_LOG("disableConfig index=" << index);
     return setConfig(index, makeDisabledConfig());
 }
 
 bool VarjoChromaKey::disableAllConfigs()
 {
+    VTK_SD_LOG("disableAllConfigs");
     if (!session_) {
         setLastError("session is null");
         return false;
@@ -210,6 +227,7 @@ varjo_ChromaKeyConfig VarjoChromaKey::makeDisabledConfig()
 {
     varjo_ChromaKeyConfig config{};
     config.type = varjo_ChromaKeyType_Disabled;
+    VTK_SD_TRACE("makeDisabledConfig");
     return config;
 }
 
@@ -242,6 +260,7 @@ varjo_ChromaKeyConfig VarjoChromaKey::makeHSVConfig(
         config.params.hsv.tolerance[i] = clamp01(tolerance[i]);
         config.params.hsv.falloff[i] = clamp01(falloff[i]);
     }
+    VTK_SD_TRACE("makeHSVConfig " << configToString(config));
     return config;
 }
 
@@ -279,6 +298,7 @@ bool VarjoChromaKey::setConfigUnlocked(int32_t index, const varjo_ChromaKeyConfi
         return false;
     }
 
+    VTK_SD_LOG("varjo_MRSetChromaKeyConfig index=" << index << " config=" << configToString(config));
     varjo_MRSetChromaKeyConfig(session_, index, &config);
     last_error_.clear();
     return true;
@@ -294,6 +314,7 @@ bool VarjoChromaKey::validateIndex(int32_t index) const
     const int32_t count = configCount();
     if (index < 0 || index >= count) {
         setLastError("chroma key config index out of range");
+        VTK_SD_ERROR("invalid chroma key index=" << index << " count=" << count);
         return false;
     }
     return true;
@@ -302,4 +323,5 @@ bool VarjoChromaKey::validateIndex(int32_t index) const
 void VarjoChromaKey::setLastError(std::string message) const
 {
     last_error_ = std::move(message);
+    VTK_SD_ERROR(last_error_);
 }
