@@ -67,7 +67,7 @@ Each line includes:
 
 ```txt
 elapsed milliseconds since first SuperDebug log
-thead id
+thread id
 level
 source file and line
 function
@@ -79,9 +79,13 @@ message
 ```txt
 VarjoSession
 VarjoFrameInfo
+VarjoScopedLock
 VarjoEventQueue
 VarjoDataStream
+VarjoDataStreamBufferLock
+VarjoChromaKey
 VarjoWorld
+VarjoMarkerTracker
 VarjoOcclusionMesh
 VarjoSwapChain
 VarjoMultiProjLayer
@@ -95,10 +99,13 @@ The logs focus on:
 ```txt
 session/runtime availability
 frame wait/snapshot state
+scoped native lock acquisition/release
+chroma key config access and updates
 swapchain creation/acquire/release
 layer begin/end/submit parameters
 video post process lock/configure/enable/submit failures
 stream config enumeration/start/stop/callback dispatch
+stream buffer lock/unlock and CPU pointer access
 world/marker object queries
 occlusion mesh creation/snapshot
 ```
