@@ -7,10 +7,9 @@ VarjoWorld::VarjoWorld(varjo_Session* session, varjo_WorldFlags flags)
     : session_(session)
     , flags_(flags)
 {
-    VTK_SD_LOG("VarjoWorld raw constructor session=" << session_ << " flags=" << static_cast<int64_t>(flags_));
     if (session_) {
         world_ = varjo_WorldInit(session_, flags_);
-        VTK_SD_LOG("varjo_WorldInit returned " << world_);
+        VTK_SD_LOG("varjo_WorldInit session=" << session_ << " flags=" << static_cast<int64_t>(flags_) << " world=" << world_);
     }
     if (!world_) {
         setLastError("failed to initialize Varjo world");
@@ -22,10 +21,9 @@ VarjoWorld::VarjoWorld(std::shared_ptr<varjo_Session> session, varjo_WorldFlags 
     , session_(session_owner_.get())
     , flags_(flags)
 {
-    VTK_SD_LOG("VarjoWorld shared constructor session=" << session_ << " flags=" << static_cast<int64_t>(flags_));
     if (session_) {
         world_ = varjo_WorldInit(session_, flags_);
-        VTK_SD_LOG("varjo_WorldInit returned " << world_);
+        VTK_SD_LOG("varjo_WorldInit session=" << session_ << " flags=" << static_cast<int64_t>(flags_) << " world=" << world_);
     }
     if (!world_) {
         setLastError("failed to initialize Varjo world");
@@ -51,15 +49,13 @@ VarjoWorld::VarjoWorld(VarjoWorld&& other) noexcept
     , world_(std::exchange(other.world_, nullptr))
     , flags_(std::exchange(other.flags_, 0))
     , last_error_(std::move(other.last_error_))
-{
-    VTK_SD_LOG("VarjoWorld move constructor session=" << session_ << " world=" << world_ << " flags=" << static_cast<int64_t>(flags_));
-}
+{}
 
 VarjoWorld& VarjoWorld::operator=(VarjoWorld&& other) noexcept
 {
     if (this != &other) {
         if (world_) {
-            VTK_SD_LOG("VarjoWorld move assignment destroying current world=" << world_);
+            VTK_SD_LOG("varjo_WorldDestroy world=" << world_);
             varjo_WorldDestroy(world_);
         }
         session_owner_ = std::move(other.session_owner_);
@@ -67,7 +63,6 @@ VarjoWorld& VarjoWorld::operator=(VarjoWorld&& other) noexcept
         world_ = std::exchange(other.world_, nullptr);
         flags_ = std::exchange(other.flags_, 0);
         last_error_ = std::move(other.last_error_);
-        VTK_SD_LOG("VarjoWorld move assignment new session=" << session_ << " world=" << world_ << " flags=" << static_cast<int64_t>(flags_));
     }
     return *this;
 }
@@ -95,7 +90,7 @@ varjo_WorldFlags VarjoWorld::flags() const
 void VarjoWorld::sync()
 {
     if (world_) {
-        VTK_SD_LOG("varjo_WorldSync world=" << world_);
+        VTK_SD_TRACE("varjo_WorldSync world=" << world_);
         varjo_WorldSync(world_);
         last_error_.clear();
     } else {
@@ -110,7 +105,7 @@ int64_t VarjoWorld::objectCount(varjo_WorldComponentTypeMask typeMask) const
         return 0;
     }
     const auto count = varjo_WorldGetObjectCount(world_, typeMask);
-    VTK_SD_LOG("varjo_WorldGetObjectCount typeMask=" << static_cast<int64_t>(typeMask) << " count=" << count);
+    VTK_SD_TRACE("varjo_WorldGetObjectCount typeMask=" << static_cast<int64_t>(typeMask) << " count=" << count);
     return count;
 }
 
@@ -123,7 +118,7 @@ std::vector<varjo_WorldObject> VarjoWorld::objects(varjo_WorldComponentTypeMask 
     }
     out.resize(static_cast<size_t>(count));
     const int64_t written = varjo_WorldGetObjects(world_, out.data(), count, typeMask);
-    VTK_SD_LOG("varjo_WorldGetObjects requested=" << count << " written=" << written << " typeMask=" << static_cast<int64_t>(typeMask));
+    VTK_SD_TRACE("varjo_WorldGetObjects requested=" << count << " written=" << written << " typeMask=" << static_cast<int64_t>(typeMask));
     if (written < count && written >= 0) {
         out.resize(static_cast<size_t>(written));
     }
@@ -137,7 +132,7 @@ bool VarjoWorld::getPoseComponent(varjo_WorldObjectId id, varjo_WorldPoseCompone
         return false;
     }
     const bool ok = (varjo_WorldGetPoseComponent(world_, id, &out, displayTime) == varjo_True);
-    VTK_SD_LOG("getPoseComponent id=" << id << " displayTime=" << displayTime << " ok=" << (ok ? "true" : "false"));
+    VTK_SD_TRACE("getPoseComponent id=" << id << " displayTime=" << displayTime << " ok=" << (ok ? "true" : "false"));
     if (!ok) {
         setLastError("failed to get world pose component");
     } else {
@@ -153,7 +148,7 @@ bool VarjoWorld::getObjectMarkerComponent(varjo_WorldObjectId id, varjo_WorldObj
         return false;
     }
     const bool ok = (varjo_WorldGetObjectMarkerComponent(world_, id, &out) == varjo_True);
-    VTK_SD_LOG("getObjectMarkerComponent id=" << id << " ok=" << (ok ? "true" : "false"));
+    VTK_SD_TRACE("getObjectMarkerComponent id=" << id << " ok=" << (ok ? "true" : "false"));
     if (!ok) {
         setLastError("failed to get world marker component");
     } else {
@@ -169,7 +164,7 @@ void VarjoWorld::setObjectMarkerTimeouts(const std::vector<varjo_WorldMarkerId>&
         return;
     }
     auto mutableIds = ids;
-    VTK_SD_LOG("setObjectMarkerTimeouts count=" << mutableIds.size() << " duration=" << duration);
+    VTK_SD_LOG("varjo_WorldSetObjectMarkerTimeouts count=" << mutableIds.size() << " duration=" << duration);
     varjo_WorldSetObjectMarkerTimeouts(world_, mutableIds.data(), static_cast<int64_t>(mutableIds.size()), duration);
 }
 
@@ -180,7 +175,7 @@ void VarjoWorld::setObjectMarkerFlags(const std::vector<varjo_WorldMarkerId>& id
         return;
     }
     auto mutableIds = ids;
-    VTK_SD_LOG("setObjectMarkerFlags count=" << mutableIds.size() << " flags=" << static_cast<int64_t>(flags));
+    VTK_SD_LOG("varjo_WorldSetObjectMarkerFlags count=" << mutableIds.size() << " flags=" << static_cast<int64_t>(flags));
     varjo_WorldSetObjectMarkerFlags(world_, mutableIds.data(), static_cast<int64_t>(mutableIds.size()), flags);
 }
 
