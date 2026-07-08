@@ -5,6 +5,7 @@
 #include <VarjoToolkit/Services/EyeTracking/VarjoEyeTrackingService.hpp>
 
 #include <VarjoToolkit/Core/VarjoFrameInfo.hpp>
+#include <VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp>
 #include <VarjoToolkit/Utilities/VarjoCsv.hpp>
 
 #include <Windows.h>
@@ -34,6 +35,55 @@ struct Vec3 {
     double y = 0.0;
     double z = 0.0;
 };
+
+bool shouldLogCounter(uint64_t value)
+{
+    return value <= 3 || ((value & (value - 1)) == 0);
+}
+
+const char* outputFilterTypeName(VarjoEyeTrackingProvider::OutputFilterType value)
+{
+    switch (value) {
+    case VarjoEyeTrackingProvider::OutputFilterType::NONE:
+        return "NONE";
+    case VarjoEyeTrackingProvider::OutputFilterType::STANDARD:
+        return "STANDARD";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+const char* outputFrequencyName(VarjoEyeTrackingProvider::OutputFrequency value)
+{
+    switch (value) {
+    case VarjoEyeTrackingProvider::OutputFrequency::MAXIMUM:
+        return "MAXIMUM";
+    case VarjoEyeTrackingProvider::OutputFrequency::_100HZ:
+        return "100HZ";
+    case VarjoEyeTrackingProvider::OutputFrequency::_200HZ:
+        return "200HZ";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+const char* gazeStatusName(VarjoEyeTrackingProvider::Status value)
+{
+    switch (value) {
+    case VarjoEyeTrackingProvider::Status::NOT_AVAILABLE:
+        return "NOT_AVAILABLE";
+    case VarjoEyeTrackingProvider::Status::NOT_CONNECTED:
+        return "NOT_CONNECTED";
+    case VarjoEyeTrackingProvider::Status::NOT_CALIBRATED:
+        return "NOT_CALIBRATED";
+    case VarjoEyeTrackingProvider::Status::CALIBRATING:
+        return "CALIBRATING";
+    case VarjoEyeTrackingProvider::Status::CALIBRATED:
+        return "CALIBRATED";
+    default:
+        return "UNKNOWN";
+    }
+}
 
 Vec3 addVec3(const Vec3& a, const Vec3& b) { return Vec3{a.x + b.x, a.y + b.y, a.z + b.z}; }
 Vec3 mulVec3(const Vec3& v, double s) { return Vec3{v.x * s, v.y * s, v.z * s}; }
@@ -309,22 +359,37 @@ std::string frameInfoHeaderCsv(const std::string& name, size_t viewCount)
 VarjoEyeTrackingProvider::VarjoEyeTrackingProvider(const std::shared_ptr<varjo_Session>& session)
     : session_(session)
     , viewCount_(session ? varjo_GetViewCount(session.get()) : 0)
-{}
+{
+    VTK_SD_LOG("VarjoEyeTrackingProvider constructor session=" << session_.get()
+        << " viewCount=" << viewCount_);
+}
 
 VarjoEyeTrackingProvider::~VarjoEyeTrackingProvider()
 {
+    VTK_SD_LOG("VarjoEyeTrackingProvider destructor");
     shutdown();
 }
 
 void VarjoEyeTrackingProvider::initialize(OutputFilterType outputFilterType, OutputFrequency outputFrequency)
 {
+    VTK_SD_LOG("VarjoEyeTrackingProvider::initialize filter=" << outputFilterTypeName(outputFilterType)
+        << " frequency=" << outputFrequencyName(outputFrequency)
+        << " viewCount=" << viewCount_);
+
+    if (!session_) {
+        VTK_SD_ERROR("VarjoEyeTrackingProvider initialize failed: session is null");
+        return;
+    }
+
     if (this->getFrameInfoWorker_.joinable()) {
+        VTK_SD_WARN("VarjoEyeTrackingProvider initialize skipped because frame info worker is already running");
         return;
     }
 
     this->workerStopSignal_.store(false);
     this->getFrameInfoWorker_ = std::thread(&VarjoEyeTrackingProvider::getFrameInfoWorkerFunction, this);
     SetThreadPriority(static_cast<HANDLE>(this->getFrameInfoWorker_.native_handle()), THREAD_PRIORITY_LOWEST);
+    VTK_SD_LOG("VarjoEyeTrackingProvider frame info worker started capacity=" << frameInfoCapacity_);
 
     while (!this->workerStopSignal_.load()) {
         {
@@ -335,6 +400,14 @@ void VarjoEyeTrackingProvider::initialize(OutputFilterType outputFilterType, Out
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
+
+    size_t frame_info_size = 0;
+    {
+        std::lock_guard lock(this->frameInfoMtx_);
+        frame_info_size = this->frameInfos_.size();
+    }
+    VTK_SD_LOG("VarjoEyeTrackingProvider frame info buffer filled size=" << frame_info_size
+        << " capacity=" << frameInfoCapacity_);
 
     varjo_GazeParameters params[2];
     params[0].key = varjo_GazeParametersKey_OutputFilterType;
@@ -362,13 +435,18 @@ void VarjoEyeTrackingProvider::initialize(OutputFilterType outputFilterType, Out
         break;
     }
 
+    VTK_SD_LOG("varjo_GazeInitWithParameters filter=" << outputFilterTypeName(outputFilterType)
+        << " frequency=" << outputFrequencyName(outputFrequency));
     varjo_GazeInitWithParameters(this->session_.get(), params, static_cast<int32_t>(std::size(params)));
+    VTK_SD_LOG("VarjoEyeTrackingProvider initialized status=" << gazeStatusName(getStatus()));
 }
 
 void VarjoEyeTrackingProvider::shutdown()
 {
+    VTK_SD_LOG("VarjoEyeTrackingProvider::shutdown workerRunning=" << (this->getFrameInfoWorker_.joinable() ? "true" : "false"));
     this->workerStopSignal_.store(true);
     if (this->getFrameInfoWorker_.joinable()) {
+        VTK_SD_LOG("joining VarjoEyeTrackingProvider frame info worker");
         this->getFrameInfoWorker_.join();
     }
 }
@@ -576,6 +654,7 @@ FrameInfo VarjoEyeTrackingProvider::requestFrameInfo()
 {
     VarjoFrameInfo frameInfo(this->session_);
     if (!frameInfo || !frameInfo.waitSync()) {
+        VTK_SD_TRACE("VarjoEyeTrackingProvider requestFrameInfo failed; using empty frame info");
         return makeEmptyFrameInfo(static_cast<size_t>(this->viewCount_));
     }
 
@@ -584,40 +663,66 @@ FrameInfo VarjoEyeTrackingProvider::requestFrameInfo()
 
 void VarjoEyeTrackingProvider::getFrameInfoWorkerFunction()
 {
+    VTK_SD_LOG("VarjoEyeTrackingProvider frame info worker started capacity=" << frameInfoCapacity_);
     setCurrentThreadLowPriorityForWaitSync();
 
+    uint64_t captured_count = 0;
+    uint64_t dropped_count = 0;
     while (!this->workerStopSignal_.load()) {
         auto frameInfo = this->requestFrameInfo();
         {
             std::lock_guard lock(this->frameInfoMtx_);
             this->frameInfos_.push_back(std::move(frameInfo));
+            ++captured_count;
             while (this->frameInfos_.size() > this->frameInfoCapacity_) {
                 this->frameInfos_.pop_front();
+                ++dropped_count;
+                if (shouldLogCounter(dropped_count)) {
+                    VTK_SD_WARN("VarjoEyeTrackingProvider frame info history dropped totalDropped=" << dropped_count);
+                }
             }
         }
     }
+
+    size_t final_size = 0;
+    {
+        std::lock_guard lock(this->frameInfoMtx_);
+        final_size = this->frameInfos_.size();
+    }
+    VTK_SD_LOG("VarjoEyeTrackingProvider frame info worker stopped captured=" << captured_count
+        << " dropped=" << dropped_count
+        << " finalSize=" << final_size);
 }
 
 VarjoEyeTrackingDataLogger::VarjoEyeTrackingDataLogger(const std::string& filepath, std::shared_ptr<varjo_Session> session)
     : session_(std::move(session))
     , filepath_(filepath)
     , viewCount_(varjo_GetViewCount(session_.get()))
-{}
+{
+    VTK_SD_LOG("VarjoEyeTrackingDataLogger constructor path=" << filepath_.string()
+        << " viewCount=" << viewCount_);
+}
 
 VarjoEyeTrackingDataLogger::~VarjoEyeTrackingDataLogger()
 {
+    VTK_SD_LOG("VarjoEyeTrackingDataLogger destructor open=" << (logfile_.is_open() ? "true" : "false"));
     close();
 }
 
 bool VarjoEyeTrackingDataLogger::open()
 {
+    VTK_SD_LOG("VarjoEyeTrackingDataLogger::open path=" << this->filepath_.string());
     if (this->logfile_.is_open()) {
+        VTK_SD_WARN("VarjoEyeTrackingDataLogger open skipped because log file is already open");
         return false;
     }
 
     this->logfile_.open(this->filepath_.string());
     if (this->logfile_.is_open()) {
         this->logfile_ << this->getHeaderCsvString();
+        VTK_SD_LOG("VarjoEyeTrackingDataLogger opened path=" << this->filepath_.string());
+    } else {
+        VTK_SD_ERROR("VarjoEyeTrackingDataLogger open failed path=" << this->filepath_.string());
     }
     return this->logfile_.is_open();
 }
@@ -627,11 +732,16 @@ void VarjoEyeTrackingDataLogger::close()
     if (!this->logfile_.is_open()) {
         return;
     }
+    VTK_SD_LOG("VarjoEyeTrackingDataLogger closing path=" << this->filepath_.string());
     this->logfile_.close();
 }
 
 void VarjoEyeTrackingDataLogger::write(const VarjoEyeTrackingData& data)
 {
+    if (!this->logfile_.is_open()) {
+        VTK_SD_TRACE("VarjoEyeTrackingDataLogger write skipped because log file is not open");
+        return;
+    }
     this->logfile_ << this->varjoEyeTrackingDataToCsvString(data);
 }
 
@@ -718,28 +828,48 @@ VarjoEyeTrackingService::VarjoEyeTrackingService(
     , logger_(filepath, session)
     , dataQueueMaxSize_(queueSize)
     , acquireFrequencyMs_(acquireFrequencyMs)
-{}
+{
+    VTK_SD_LOG("VarjoEyeTrackingService constructor session=" << session_.get()
+        << " filepath=" << filepath
+        << " queueSize=" << dataQueueMaxSize_
+        << " acquireFrequencyMs=" << acquireFrequencyMs_
+        << " filter=" << outputFilterTypeName(outputFilterType_)
+        << " frequency=" << outputFrequencyName(outputFrequency_));
+}
 
 bool VarjoEyeTrackingService::start()
 {
+    VTK_SD_LOG("VarjoEyeTrackingService::start filepath logger/open queueSize=" << dataQueueMaxSize_
+        << " acquireFrequencyMs=" << acquireFrequencyMs_);
     if (!logger_.open()) {
+        VTK_SD_ERROR("VarjoEyeTrackingService start failed: logger open failed");
         return false;
     }
 
     this->threadEndSignal_.store(false);
     this->eyeTracker_.initialize(this->outputFilterType_, this->outputFrequency_);
     this->dataRequestThread_ = std::thread(&VarjoEyeTrackingService::dataRequestWorker, this);
+    VTK_SD_LOG("VarjoEyeTrackingService data request worker started");
     return true;
 }
 
 void VarjoEyeTrackingService::stop()
 {
+    VTK_SD_LOG("VarjoEyeTrackingService::stop workerRunning=" << (this->dataRequestThread_.joinable() ? "true" : "false"));
     this->threadEndSignal_.store(true);
     if (this->dataRequestThread_.joinable()) {
+        VTK_SD_LOG("joining VarjoEyeTrackingService data request worker");
         this->dataRequestThread_.join();
     }
     this->eyeTracker_.shutdown();
     this->logger_.close();
+
+    size_t queue_size = 0;
+    {
+        std::lock_guard<std::mutex> lock(this->dataQueueMutex_);
+        queue_size = this->dataQueue_.size();
+    }
+    VTK_SD_LOG("VarjoEyeTrackingService stopped queueSize=" << queue_size);
 }
 
 std::deque<VarjoEyeTrackingData> VarjoEyeTrackingService::requestData()
@@ -749,23 +879,55 @@ std::deque<VarjoEyeTrackingData> VarjoEyeTrackingService::requestData()
         std::lock_guard<std::mutex> lock(this->dataQueueMutex_);
         out.swap(this->dataQueue_);
     }
+    VTK_SD_TRACE("VarjoEyeTrackingService::requestData returned=" << out.size());
     return out;
 }
 
 void VarjoEyeTrackingService::dataRequestWorker()
 {
+    VTK_SD_LOG("VarjoEyeTrackingService data request worker started acquireFrequencyMs=" << this->acquireFrequencyMs_
+        << " queueMaxSize=" << this->dataQueueMaxSize_);
+
+    uint64_t poll_count = 0;
+    uint64_t empty_poll_count = 0;
+    uint64_t received_count = 0;
+    uint64_t written_count = 0;
+    uint64_t queue_drop_count = 0;
+
     while (!this->threadEndSignal_.load()) {
+        ++poll_count;
         auto datas = this->eyeTracker_.getEyeTrackingData();
-        if (!datas.empty()) {
+        if (datas.empty()) {
+            ++empty_poll_count;
+        } else {
+            received_count += static_cast<uint64_t>(datas.size());
             std::lock_guard<std::mutex> lock(this->dataQueueMutex_);
             for (const auto& data : datas) {
                 this->logger_.write(data);
+                ++written_count;
                 this->dataQueue_.push_back(data);
                 while (this->dataQueue_.size() > this->dataQueueMaxSize_) {
                     this->dataQueue_.pop_front();
+                    ++queue_drop_count;
+                    if (shouldLogCounter(queue_drop_count)) {
+                        VTK_SD_WARN("VarjoEyeTrackingService data queue dropped old samples totalDropped=" << queue_drop_count
+                            << " queueMaxSize=" << this->dataQueueMaxSize_);
+                    }
                 }
             }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(this->acquireFrequencyMs_));
     }
+
+    size_t final_queue_size = 0;
+    {
+        std::lock_guard<std::mutex> lock(this->dataQueueMutex_);
+        final_queue_size = this->dataQueue_.size();
+    }
+    VTK_SD_LOG("VarjoEyeTrackingService data request worker stopped polls=" << poll_count
+        << " emptyPolls=" << empty_poll_count
+        << " received=" << received_count
+        << " written=" << written_count
+        << " queueDropped=" << queue_drop_count
+        << " finalQueueSize=" << final_queue_size);
 }
