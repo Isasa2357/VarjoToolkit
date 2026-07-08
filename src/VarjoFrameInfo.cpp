@@ -7,10 +7,9 @@
 VarjoFrameInfo::VarjoFrameInfo(varjo_Session* session)
     : session_(session)
 {
-    VTK_SD_LOG("VarjoFrameInfo raw constructor session=" << session_);
     if (session_) {
         frame_info_ = varjo_CreateFrameInfo(session_);
-        VTK_SD_LOG("varjo_CreateFrameInfo returned " << frame_info_);
+        VTK_SD_LOG("varjo_CreateFrameInfo session=" << session_ << " frame_info=" << frame_info_);
     } else {
         VTK_SD_WARN("VarjoFrameInfo constructed with null session");
     }
@@ -20,10 +19,9 @@ VarjoFrameInfo::VarjoFrameInfo(std::shared_ptr<varjo_Session> session)
     : session_owner_(std::move(session))
     , session_(session_owner_.get())
 {
-    VTK_SD_LOG("VarjoFrameInfo shared constructor session=" << session_);
     if (session_) {
         frame_info_ = varjo_CreateFrameInfo(session_);
-        VTK_SD_LOG("varjo_CreateFrameInfo returned " << frame_info_);
+        VTK_SD_LOG("varjo_CreateFrameInfo session=" << session_ << " frame_info=" << frame_info_);
     } else {
         VTK_SD_WARN("VarjoFrameInfo constructed with null shared session");
     }
@@ -35,7 +33,6 @@ VarjoFrameInfo::VarjoFrameInfo(const VarjoSession& session)
 
 VarjoFrameInfo::~VarjoFrameInfo()
 {
-    VTK_SD_LOG("VarjoFrameInfo destructor frame_info=" << frame_info_);
     release();
 }
 
@@ -43,40 +40,33 @@ VarjoFrameInfo::VarjoFrameInfo(VarjoFrameInfo&& other) noexcept
     : session_owner_(std::move(other.session_owner_))
     , session_(std::exchange(other.session_, nullptr))
     , frame_info_(std::exchange(other.frame_info_, nullptr))
-{
-    VTK_SD_LOG("VarjoFrameInfo move constructor session=" << session_ << " frame_info=" << frame_info_);
-}
+{}
 
 VarjoFrameInfo& VarjoFrameInfo::operator=(VarjoFrameInfo&& other) noexcept
 {
     if (this != &other) {
-        VTK_SD_LOG("VarjoFrameInfo move assignment releasing current frame_info=" << frame_info_);
         release();
         session_owner_ = std::move(other.session_owner_);
         session_ = std::exchange(other.session_, nullptr);
         frame_info_ = std::exchange(other.frame_info_, nullptr);
-        VTK_SD_LOG("VarjoFrameInfo move assignment new session=" << session_ << " frame_info=" << frame_info_);
     }
     return *this;
 }
 
 bool VarjoFrameInfo::valid() const
 {
-    const bool isValid = session_ != nullptr && frame_info_ != nullptr;
-    VTK_SD_TRACE("VarjoFrameInfo::valid=" << (isValid ? "true" : "false") << " session=" << session_ << " frame_info=" << frame_info_);
-    return isValid;
+    return session_ != nullptr && frame_info_ != nullptr;
 }
 
 bool VarjoFrameInfo::waitSync()
 {
-    VTK_SD_SCOPE("VarjoFrameInfo::waitSync");
     if (!valid()) {
         VTK_SD_ERROR("waitSync called with invalid frame info session=" << session_ << " frame_info=" << frame_info_);
         return false;
     }
 
     varjo_WaitSync(session_, frame_info_);
-    VTK_SD_LOG("waitSync complete frameNumber=" << frame_info_->frameNumber << " displayTime=" << frame_info_->displayTime << " viewCount=" << viewCount());
+    VTK_SD_TRACE("waitSync complete frameNumber=" << frame_info_->frameNumber << " displayTime=" << frame_info_->displayTime << " viewCount=" << viewCount());
     return true;
 }
 
@@ -111,9 +101,7 @@ int32_t VarjoFrameInfo::viewCount() const
         VTK_SD_WARN("viewCount requested with invalid frame info");
         return 0;
     }
-    const auto count = varjo_GetViewCount(session_);
-    VTK_SD_TRACE("VarjoFrameInfo::viewCount=" << count);
-    return count;
+    return varjo_GetViewCount(session_);
 }
 
 const varjo_ViewInfo* VarjoFrameInfo::views() const
@@ -167,7 +155,7 @@ VarjoFrameInfoSnapshot VarjoFrameInfo::snapshot() const
     out.displayTime = frame_info_->displayTime;
     out.frameNumber = frame_info_->frameNumber;
     out.valid = true;
-    VTK_SD_LOG("snapshot frameNumber=" << out.frameNumber << " displayTime=" << out.displayTime << " views=" << out.views.size());
+    VTK_SD_TRACE("snapshot frameNumber=" << out.frameNumber << " displayTime=" << out.displayTime << " views=" << out.views.size());
     return out;
 }
 
