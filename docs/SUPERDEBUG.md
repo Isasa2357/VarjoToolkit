@@ -144,6 +144,7 @@ VarjoMarkerTrackingService
 VarjoMarkerTrackingCsvLogger
 VarjoIMUService
 VarjoVSTService
+VarjoEyeCameraService
 ```
 
 ## Implementation notes
