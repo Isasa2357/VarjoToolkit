@@ -109,7 +109,8 @@ int main()
                 rtvDesc.Texture2DArray.MipSlice = 0;
                 rtvDesc.Texture2DArray.FirstArraySlice = static_cast<UINT>(arrayIndex);
                 rtvDesc.Texture2DArray.ArraySize = 1;
-                hmdThrowIfFailed(device->CreateRenderTargetView(d3dTexture, &rtvDesc, &renderTargets[targetIndex(imageIndex, arrayIndex, config.textureArraySize)]), "CreateRenderTargetView");
+                auto& target = renderTargets[targetIndex(imageIndex, arrayIndex, config.textureArraySize)];
+                hmdThrowIfFailed(device->CreateRenderTargetView(d3dTexture, &rtvDesc, target.GetAddressOf()), "CreateRenderTargetView");
             }
         }
 
