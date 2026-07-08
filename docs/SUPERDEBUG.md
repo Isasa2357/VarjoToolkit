@@ -92,6 +92,10 @@ VarjoMultiProjLayer
 VarjoLayerFrame
 VarjoVideoPostProcessShader
 VarjoShaderTextureLock
+VarjoEventService
+VarjoEventCsvLogger
+VarjoMarkerTrackingService
+VarjoMarkerTrackingCsvLogger
 ```
 
 The logs focus on:
@@ -108,6 +112,9 @@ stream config enumeration/start/stop/callback dispatch
 stream buffer lock/unlock and CPU pointer access
 world/marker object queries
 occlusion mesh creation/snapshot
+service start/stop and worker thread lifecycle
+CSV output open/write/close failures
+service queue overflow and request/drain operations
 ```
 
 ## Implementation notes
