@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(VarjoToolkit VERSION 0.2.0 LANGUAGES CXX)
+project(VarjoToolkit VERSION 0.3.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
@@ -141,55 +141,43 @@ add_library(VarjoToolkit STATIC
 )
 
 add_library(VarjoToolkit::VarjoToolkit ALIAS VarjoToolkit)
-# Compatibility alias for older sample/application CMakeLists.
-add_library(VarjoServices ALIAS VarjoToolkit)
-
-set_target_properties(VarjoToolkit PROPERTIES
-    VERSION ${PROJECT_VERSION}
-    EXPORT_NAME VarjoToolkit
-)
 
 target_include_directories(VarjoToolkit
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${VARJO_INCLUDE_DIR}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
-        "${VARJO_INCLUDE_DIR}"
+    PRIVATE
+        ${VARJO_EXPERIMENTAL_INCLUDE_DIR}
 )
-
-if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS)
-    target_include_directories(VarjoToolkit
-        PUBLIC
-            "${VARJO_EXPERIMENTAL_INCLUDE_DIR}"
-    )
-endif()
 
 target_link_libraries(VarjoToolkit
     PUBLIC
-        "${VARJO_LIBRARY}"
+        ${VARJO_LIBRARY}
 )
 
 target_compile_definitions(VarjoToolkit
     PUBLIC
         NOMINMAX
-        WIN32_LEAN_AND_MEAN
-        VARJOTOOLKIT_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
-        VARJOTOOLKIT_VERSION_MINOR=${PROJECT_VERSION_MINOR}
-        VARJOTOOLKIT_VERSION_PATCH=${PROJECT_VERSION_PATCH}
-        VARJOTOOLKIT_VERSION_STRING="${PROJECT_VERSION}"
+        $<$<BOOL:${VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS}>:VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS=1>
         VARJOTOOLKIT_SUPERDEBUG=$<IF:$<AND:$<CONFIG:Debug>,$<BOOL:${VARJOTOOLKIT_ENABLE_SUPERDEBUG}>>,1,0>
 )
 
-if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS)
-    target_compile_definitions(VarjoToolkit PUBLIC VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS=1)
-else()
-    target_compile_definitions(VarjoToolkit PUBLIC VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS=0)
+if (WIN32)
+    target_link_libraries(VarjoToolkit
+        PUBLIC
+            dxgi
+            d3d11
+            d3d12
+            dxguid
+    )
 endif()
 
-if (MSVC)
-    target_compile_options(VarjoToolkit PRIVATE /utf-8 /W4 /permissive-)
-else()
-    target_compile_options(VarjoToolkit PRIVATE -Wall -Wextra -Wpedantic)
-endif()
+set_target_properties(VarjoToolkit PROPERTIES
+    EXPORT_NAME VarjoToolkit
+    VERSION ${PROJECT_VERSION}
+    SOVERSION ${PROJECT_VERSION_MAJOR}
+)
 
 install(TARGETS VarjoToolkit
     EXPORT VarjoToolkitTargets
@@ -204,7 +192,6 @@ install(DIRECTORY include/
 )
 
 install(EXPORT VarjoToolkitTargets
-    FILE VarjoToolkitTargets.cmake
     NAMESPACE VarjoToolkit::
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/VarjoToolkit
 )
@@ -227,125 +214,11 @@ install(FILES
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/VarjoToolkit
 )
 
-if (VARJOTOOLKIT_BUILD_SAMPLES)
-    add_subdirectory(samples)
-    set_property(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}" PROPERTY VS_STARTUP_PROJECT VarjoServiceLoggerSample)
-endif()
-
 if (VARJOTOOLKIT_BUILD_TESTS OR VARJOTOOLKIT_BUILD_HMD_TESTS)
     enable_testing()
+    add_subdirectory(tests)
 endif()
 
-if (VARJOTOOLKIT_BUILD_TESTS)
-    set(_varjotoolkit_test_targets)
-
-    add_executable(VarjoToolkitCsvUtilityTest
-        tests/CsvUtilityTest.cpp
-    )
-    list(APPEND _varjotoolkit_test_targets VarjoToolkitCsvUtilityTest)
-
-    add_executable(VarjoToolkitDataStreamWrappersTest
-        tests/DataStreamWrappersTest.cpp
-    )
-    list(APPEND _varjotoolkit_test_targets VarjoToolkitDataStreamWrappersTest)
-
-    add_executable(VarjoToolkitCameraPropertiesTest
-        tests/CameraPropertiesTest.cpp
-    )
-    list(APPEND _varjotoolkit_test_targets VarjoToolkitCameraPropertiesTest)
-
-    add_executable(VarjoToolkitScopedLockChromaKeyTest
-        tests/ScopedLockChromaKeyTest.cpp
-    )
-    list(APPEND _varjotoolkit_test_targets VarjoToolkitScopedLockChromaKeyTest)
-
-    add_executable(VarjoToolkitRenderingWorldWrappersTest
-        tests/RenderingWorldWrappersTest.cpp
-    )
-    list(APPEND _varjotoolkit_test_targets VarjoToolkitRenderingWorldWrappersTest)
-
-    add_executable(VarjoToolkitQueueTimestampUtilityTest
-        tests/QueueTimestampUtilityTest.cpp
-    )
-    list(APPEND _varjotoolkit_test_targets VarjoToolkitQueueTimestampUtilityTest)
-
-    add_executable(VarjoToolkitCameraChromaDetailedTest
-        tests/CameraChromaDetailedTest.cpp
-    )
-    list(APPEND _varjotoolkit_test_targets VarjoToolkitCameraChromaDetailedTest)
-
-    add_executable(VarjoToolkitRenderingWorldDetailedTest
-        tests/RenderingWorldDetailedTest.cpp
-    )
-    list(APPEND _varjotoolkit_test_targets VarjoToolkitRenderingWorldDetailedTest)
-
-    add_executable(VarjoToolkitEventMarkerServicesTest
-        tests/EventMarkerServicesTest.cpp
-    )
-    list(APPEND _varjotoolkit_test_targets VarjoToolkitEventMarkerServicesTest)
-
-    if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS)
-        add_executable(VarjoToolkitVideoPostProcessShaderTest
-            tests/VideoPostProcessShaderTest.cpp
-        )
-        list(APPEND _varjotoolkit_test_targets VarjoToolkitVideoPostProcessShaderTest)
-    endif()
-
-    foreach(_varjotoolkit_test_target IN LISTS _varjotoolkit_test_targets)
-        target_link_libraries(${_varjotoolkit_test_target}
-            PRIVATE
-                VarjoToolkit::VarjoToolkit
-        )
-
-        target_compile_definitions(${_varjotoolkit_test_target}
-            PRIVATE
-                NOMINMAX
-                WIN32_LEAN_AND_MEAN
-        )
-
-        if (MSVC)
-            target_compile_options(${_varjotoolkit_test_target} PRIVATE /utf-8 /W4 /permissive-)
-        else()
-            target_compile_options(${_varjotoolkit_test_target} PRIVATE -Wall -Wextra -Wpedantic)
-        endif()
-
-        add_test(NAME ${_varjotoolkit_test_target} COMMAND ${_varjotoolkit_test_target})
-    endforeach()
-
-    add_test(
-        NAME VarjoToolkitPackageConsumerTest
-        COMMAND ${CMAKE_COMMAND}
-            -DVARJOTOOLKIT_SOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}
-            -DVARJOTOOLKIT_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
-            -DVARJOTOOLKIT_PACKAGE_TEST_DIR=${CMAKE_CURRENT_BINARY_DIR}/package-consumer-test
-            -DVARJOTOOLKIT_CONFIG=$<CONFIG>
-            -DVARJOTOOLKIT_GENERATOR=${CMAKE_GENERATOR}
-            -DVARJOTOOLKIT_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}
-            -DVARJOTOOLKIT_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/PackageConsumer/RunPackageConsumerTest.cmake
-    )
-endif()
-
-if (VARJOTOOLKIT_BUILD_HMD_TESTS)
-    add_executable(VarjoToolkitCoreSmokeTest
-        tests/CoreWrappersSmokeTest.cpp
-    )
-    target_link_libraries(VarjoToolkitCoreSmokeTest
-        PRIVATE
-            VarjoToolkit::VarjoToolkit
-    )
-    target_compile_definitions(VarjoToolkitCoreSmokeTest
-        PRIVATE
-            NOMINMAX
-            WIN32_LEAN_AND_MEAN
-    )
-    if (MSVC)
-        target_compile_options(VarjoToolkitCoreSmokeTest PRIVATE /utf-8 /W4 /permissive-)
-    else()
-        target_compile_options(VarjoToolkitCoreSmokeTest PRIVATE -Wall -Wextra -Wpedantic)
-    endif()
-    add_test(NAME VarjoToolkitCoreSmokeTest COMMAND VarjoToolkitCoreSmokeTest)
-    set_tests_properties(VarjoToolkitCoreSmokeTest PROPERTIES LABELS "hmd")
-
-    add_subdirectory(tests/HmdSmokeTests)
+if (VARJOTOOLKIT_BUILD_SAMPLES)
+    add_subdirectory(samples)
 endif()
