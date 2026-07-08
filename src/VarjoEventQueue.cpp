@@ -1,10 +1,12 @@
 #include <VarjoToolkit/Core/VarjoEventQueue.hpp>
+#include <VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp>
 
 #include <utility>
 
 VarjoEventQueue::VarjoEventQueue(varjo_Session* session)
     : session_(session)
 {
+    VTK_SD_LOG("VarjoEventQueue raw constructor session=" << session_);
     resetEventStorage();
 }
 
@@ -12,6 +14,7 @@ VarjoEventQueue::VarjoEventQueue(std::shared_ptr<varjo_Session> session)
     : session_owner_(std::move(session))
     , session_(session_owner_.get())
 {
+    VTK_SD_LOG("VarjoEventQueue shared constructor session=" << session_);
     resetEventStorage();
 }
 
@@ -22,6 +25,7 @@ VarjoEventQueue::VarjoEventQueue(const VarjoSession& session)
 VarjoEventQueue::~VarjoEventQueue()
 {
     if (event_) {
+        VTK_SD_LOG("varjo_FreeEvent event=" << event_);
         varjo_FreeEvent(event_);
         event_ = nullptr;
     }
@@ -32,18 +36,22 @@ VarjoEventQueue::VarjoEventQueue(VarjoEventQueue&& other) noexcept
     , session_(std::exchange(other.session_, nullptr))
     , event_(std::exchange(other.event_, nullptr))
     , last_error_(std::move(other.last_error_))
-{}
+{
+    VTK_SD_LOG("VarjoEventQueue move constructor session=" << session_ << " event=" << event_);
+}
 
 VarjoEventQueue& VarjoEventQueue::operator=(VarjoEventQueue&& other) noexcept
 {
     if (this != &other) {
         if (event_) {
+            VTK_SD_LOG("VarjoEventQueue move assignment freeing current event=" << event_);
             varjo_FreeEvent(event_);
         }
         session_owner_ = std::move(other.session_owner_);
         session_ = std::exchange(other.session_, nullptr);
         event_ = std::exchange(other.event_, nullptr);
         last_error_ = std::move(other.last_error_);
+        VTK_SD_LOG("VarjoEventQueue move assignment new session=" << session_ << " event=" << event_);
     }
     return *this;
 }
@@ -75,16 +83,19 @@ bool VarjoEventQueue::poll(varjo_Event& outEvent)
     }
 
     if (varjo_PollEvent(session_, event_) != varjo_True) {
+        VTK_SD_TRACE("varjo_PollEvent returned no event");
         return false;
     }
 
     outEvent = *event_;
     last_error_.clear();
+    VTK_SD_LOG("polled event type=" << eventTypeToString(outEvent.header.type) << " raw=" << static_cast<int64_t>(outEvent.header.type));
     return true;
 }
 
 std::vector<varjo_Event> VarjoEventQueue::pollAll(size_t maxEvents)
 {
+    VTK_SD_LOG("pollAll maxEvents=" << maxEvents);
     std::vector<varjo_Event> out;
     out.reserve(maxEvents);
     for (size_t i = 0; i < maxEvents; ++i) {
@@ -94,6 +105,7 @@ std::vector<varjo_Event> VarjoEventQueue::pollAll(size_t maxEvents)
         }
         out.push_back(event);
     }
+    VTK_SD_LOG("pollAll resultCount=" << out.size());
     return out;
 }
 
@@ -126,6 +138,7 @@ std::string VarjoEventQueue::eventTypeToString(varjo_EventType type)
 void VarjoEventQueue::resetEventStorage()
 {
     event_ = varjo_AllocateEvent();
+    VTK_SD_LOG("varjo_AllocateEvent returned " << event_);
     if (!event_) {
         setLastError("failed to allocate Varjo event storage");
     }
@@ -134,4 +147,5 @@ void VarjoEventQueue::resetEventStorage()
 void VarjoEventQueue::setLastError(std::string message) const
 {
     last_error_ = std::move(message);
+    VTK_SD_ERROR(last_error_);
 }
