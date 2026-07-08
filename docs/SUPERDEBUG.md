@@ -146,6 +146,7 @@ VarjoIMUService
 VarjoVSTService
 VarjoEyeCameraService
 VarjoEnvironmentCubemapService
+VarjoEyeTrackingService
 ```
 
 ## Implementation notes
