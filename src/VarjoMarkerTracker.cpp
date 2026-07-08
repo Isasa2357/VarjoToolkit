@@ -6,19 +6,19 @@
 VarjoMarkerTracker::VarjoMarkerTracker(varjo_Session* session)
     : world_(session, varjo_WorldFlag_UseObjectMarkers)
 {
-    VTK_SD_LOG("VarjoMarkerTracker raw constructor session=" << session << " valid=" << (world_.valid() ? "true" : "false"));
+    VTK_SD_LOG("VarjoMarkerTracker initialized valid=" << (world_.valid() ? "true" : "false"));
 }
 
 VarjoMarkerTracker::VarjoMarkerTracker(std::shared_ptr<varjo_Session> session)
     : world_(std::move(session), varjo_WorldFlag_UseObjectMarkers)
 {
-    VTK_SD_LOG("VarjoMarkerTracker shared constructor valid=" << (world_.valid() ? "true" : "false"));
+    VTK_SD_LOG("VarjoMarkerTracker initialized valid=" << (world_.valid() ? "true" : "false"));
 }
 
 VarjoMarkerTracker::VarjoMarkerTracker(const VarjoSession& session)
     : world_(session, varjo_WorldFlag_UseObjectMarkers)
 {
-    VTK_SD_LOG("VarjoMarkerTracker VarjoSession constructor valid=" << (world_.valid() ? "true" : "false"));
+    VTK_SD_LOG("VarjoMarkerTracker initialized valid=" << (world_.valid() ? "true" : "false"));
 }
 
 bool VarjoMarkerTracker::valid() const
@@ -38,8 +38,6 @@ const VarjoWorld& VarjoMarkerTracker::world() const
 
 std::vector<VarjoMarkerTracker::Marker> VarjoMarkerTracker::markers(varjo_Nanoseconds displayTime, bool syncBeforeQuery)
 {
-    VTK_SD_SCOPE("VarjoMarkerTracker::markers");
-    VTK_SD_LOG("markers displayTime=" << displayTime << " syncBeforeQuery=" << (syncBeforeQuery ? "true" : "false"));
     std::vector<Marker> out;
     if (!world_) {
         VTK_SD_WARN("markers requested with invalid world");
@@ -51,7 +49,7 @@ std::vector<VarjoMarkerTracker::Marker> VarjoMarkerTracker::markers(varjo_Nanose
     }
 
     const auto objects = world_.objects(varjo_WorldComponentTypeMask_ObjectMarker);
-    VTK_SD_LOG("marker world object count=" << objects.size());
+    VTK_SD_TRACE("marker world object count=" << objects.size() << " displayTime=" << displayTime);
     out.reserve(objects.size());
     for (const auto& object : objects) {
         Marker marker{};
@@ -60,7 +58,7 @@ std::vector<VarjoMarkerTracker::Marker> VarjoMarkerTracker::markers(varjo_Nanose
         if (VarjoWorld::hasComponent(object, varjo_WorldComponentTypeMask_Pose)) {
             marker.hasPose = world_.getPoseComponent(object.id, marker.pose, displayTime);
         }
-        VTK_SD_LOG("marker object id=" << object.id << " typeMask=" << static_cast<int64_t>(object.typeMask) << " hasMarker=" << (marker.hasMarker ? "true" : "false") << " hasPose=" << (marker.hasPose ? "true" : "false"));
+        VTK_SD_TRACE("marker object id=" << object.id << " typeMask=" << static_cast<int64_t>(object.typeMask) << " hasMarker=" << (marker.hasMarker ? "true" : "false") << " hasPose=" << (marker.hasPose ? "true" : "false"));
         out.push_back(marker);
     }
     return out;
