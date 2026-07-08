@@ -84,9 +84,8 @@ varjo_BufferMetadata VarjoDataStreamBufferLock::metadata() const
         VTK_SD_WARN("metadata requested while buffer is not locked");
         return varjo_BufferMetadata{};
     }
-    const auto metadata = varjo_GetBufferMetadata(session_, buffer_id_);
-    VTK_SD_TRACE("buffer metadata bufferId=" << buffer_id_ << " size=" << metadata.byteSize << " timestamp=" << metadata.timestamp);
-    return metadata;
+    VTK_SD_TRACE("varjo_GetBufferMetadata bufferId=" << buffer_id_);
+    return varjo_GetBufferMetadata(session_, buffer_id_);
 }
 
 const void* VarjoDataStreamBufferLock::cpuData() const
