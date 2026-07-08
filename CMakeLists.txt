@@ -9,6 +9,7 @@ option(VARJOTOOLKIT_BUILD_SAMPLES "Build VarjoToolkit sample applications" ON)
 option(VARJOTOOLKIT_BUILD_TESTS "Build VarjoToolkit HMD-independent tests" OFF)
 option(VARJOTOOLKIT_BUILD_HMD_TESTS "Build tests that require Varjo Base and a connected Varjo HMD" OFF)
 option(VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS "Build experimental Varjo video post process shader wrapper" ON)
+option(VARJOTOOLKIT_ENABLE_SUPERDEBUG "Enable verbose console SuperDebug diagnostics in Debug builds" OFF)
 
 # Backward compatibility for the previous option name.
 if (DEFINED VARJOSERVICES_BUILD_SAMPLES)
@@ -100,6 +101,9 @@ message(STATUS "Using Varjo library: ${VARJO_LIBRARY}")
 if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS)
     message(STATUS "Using Varjo experimental include dir: ${VARJO_EXPERIMENTAL_INCLUDE_DIR}")
 endif()
+if (VARJOTOOLKIT_ENABLE_SUPERDEBUG)
+    message(STATUS "VarjoToolkit SuperDebug is enabled for Debug configuration")
+endif()
 
 set(VARJOTOOLKIT_SOURCES
     src/VarjoSession.cpp
@@ -172,6 +176,7 @@ target_compile_definitions(VarjoToolkit
         VARJOTOOLKIT_VERSION_MINOR=${PROJECT_VERSION_MINOR}
         VARJOTOOLKIT_VERSION_PATCH=${PROJECT_VERSION_PATCH}
         VARJOTOOLKIT_VERSION_STRING="${PROJECT_VERSION}"
+        VARJOTOOLKIT_SUPERDEBUG=$<IF:$<AND:$<CONFIG:Debug>,$<BOOL:${VARJOTOOLKIT_ENABLE_SUPERDEBUG}>>,1,0>
 )
 
 if (VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS)
