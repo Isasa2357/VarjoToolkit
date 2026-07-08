@@ -38,7 +38,7 @@ std::string wideToUtf8ForLog(const std::wstring& value)
         nullptr);
 
     if (output_size <= 0) {
-        return std::string(value.begin(), value.end());
+        return "<wide-to-utf8 failed>";
     }
 
     std::string output(static_cast<size_t>(output_size), '\0');
@@ -53,7 +53,7 @@ std::string wideToUtf8ForLog(const std::wstring& value)
         nullptr);
 
     if (converted <= 0) {
-        return std::string(value.begin(), value.end());
+        return "<wide-to-utf8 failed>";
     }
     return output;
 }
