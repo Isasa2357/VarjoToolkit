@@ -11,6 +11,48 @@ VARJOTOOLKIT_ENABLE_SUPERDEBUG=ON
 
 When both are true, the public compile definition `VARJOTOOLKIT_SUPERDEBUG=1` is set. In all other configurations it is `0`.
 
+## Output policy
+
+Default SuperDebug output is intentionally limited to:
+
+```txt
+external API boundaries
+failures / setLastError paths
+important state changes
+```
+
+Examples of logs that should be visible by default:
+
+```txt
+varjo_SessionInit / varjo_SessionShutDown
+varjo_Lock / varjo_Unlock
+stream start / stop
+swapchain create / acquire / release
+layer submit
+shader configure / enable / native error checks
+CSV open / close failures
+service start / stop / worker lifecycle
+queue overflow or dropped data
+```
+
+Examples of logs that should not be visible by default:
+
+```txt
+simple getter calls
+valid() checks
+per-frame WaitSync success logs
+per-callback frame dispatch details
+per-marker details
+fine-grained scope enter / leave logs
+```
+
+`VTK_SD_TRACE` and `VTK_SD_SCOPE` are compiled as no-op by default, even when SuperDebug is enabled. They are reserved for temporary local investigation. Enable them manually only when needed with:
+
+```txt
+VARJOTOOLKIT_SUPERDEBUG_TRACE=1
+VARJOTOOLKIT_SUPERDEBUG_SCOPE=1
+```
+
 ## Build
 
 ```bat
@@ -53,7 +95,7 @@ ctest --test-dir out\build\superdebug -C Debug -L mr --output-on-failure
 ctest --test-dir out\build\superdebug -C Debug -L datastream --output-on-failure
 ```
 
-## Output
+## Output format
 
 SuperDebug currently writes to the console through `std::clog`.
 
@@ -96,25 +138,6 @@ VarjoEventService
 VarjoEventCsvLogger
 VarjoMarkerTrackingService
 VarjoMarkerTrackingCsvLogger
-```
-
-The logs focus on:
-
-```txt
-session/runtime availability
-frame wait/snapshot state
-scoped native lock acquisition/release
-chroma key config access and updates
-swapchain creation/acquire/release
-layer begin/end/submit parameters
-video post process lock/configure/enable/submit failures
-stream config enumeration/start/stop/callback dispatch
-stream buffer lock/unlock and CPU pointer access
-world/marker object queries
-occlusion mesh creation/snapshot
-service start/stop and worker thread lifecycle
-CSV output open/write/close failures
-service queue overflow and request/drain operations
 ```
 
 ## Implementation notes
