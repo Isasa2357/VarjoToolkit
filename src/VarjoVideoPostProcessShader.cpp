@@ -1,4 +1,5 @@
 #include <VarjoToolkit/MR/VarjoVideoPostProcessShader.hpp>
+#include <VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp>
 
 #include <algorithm>
 #include <limits>
@@ -14,6 +15,17 @@ const char* safeErrorDesc(varjo_Error error)
     return desc ? desc : "unknown Varjo error";
 }
 
+void logShaderConfig(const char* label, const varjo_ShaderConfig& config)
+{
+    VTK_SD_LOG(label
+        << " format=" << static_cast<int64_t>(config.format)
+        << " inputLayout=" << static_cast<int64_t>(config.inputLayout)
+        << " inputFlags=" << static_cast<int64_t>(config.params.videoPostProcess.inputFlags)
+        << " computeBlockSize=" << config.params.videoPostProcess.computeBlockSize
+        << " samplingMargin=" << config.params.videoPostProcess.samplingMargin
+        << " constantBufferSize=" << config.params.videoPostProcess.constantBufferSize);
+}
+
 } // namespace
 
 VarjoShaderTextureLock::VarjoShaderTextureLock(std::shared_ptr<varjo_Session> session, varjo_ShaderType shaderType, int32_t textureIndex)
@@ -22,6 +34,7 @@ VarjoShaderTextureLock::VarjoShaderTextureLock(std::shared_ptr<varjo_Session> se
     , shader_type_(shaderType)
     , texture_index_(textureIndex)
 {
+    VTK_SD_LOG("VarjoShaderTextureLock shared constructor session=" << session_ << " shaderType=" << static_cast<int64_t>(shader_type_) << " textureIndex=" << texture_index_);
     acquire();
 }
 
@@ -30,11 +43,13 @@ VarjoShaderTextureLock::VarjoShaderTextureLock(varjo_Session* session, varjo_Sha
     , shader_type_(shaderType)
     , texture_index_(textureIndex)
 {
+    VTK_SD_LOG("VarjoShaderTextureLock raw constructor session=" << session_ << " shaderType=" << static_cast<int64_t>(shader_type_) << " textureIndex=" << texture_index_);
     acquire();
 }
 
 VarjoShaderTextureLock::~VarjoShaderTextureLock()
 {
+    VTK_SD_LOG("VarjoShaderTextureLock destructor acquired=" << (acquired_ ? "true" : "false") << " textureIndex=" << texture_index_);
     release();
 }
 
@@ -46,11 +61,14 @@ VarjoShaderTextureLock::VarjoShaderTextureLock(VarjoShaderTextureLock&& other) n
     , texture_(std::exchange(other.texture_, varjo_Texture{}))
     , acquired_(std::exchange(other.acquired_, false))
     , last_error_(std::move(other.last_error_))
-{}
+{
+    VTK_SD_LOG("VarjoShaderTextureLock move constructor acquired=" << (acquired_ ? "true" : "false") << " textureIndex=" << texture_index_);
+}
 
 VarjoShaderTextureLock& VarjoShaderTextureLock::operator=(VarjoShaderTextureLock&& other) noexcept
 {
     if (this != &other) {
+        VTK_SD_LOG("VarjoShaderTextureLock move assignment releasing current acquired=" << (acquired_ ? "true" : "false"));
         release();
         session_owner_ = std::move(other.session_owner_);
         session_ = std::exchange(other.session_, nullptr);
@@ -59,6 +77,7 @@ VarjoShaderTextureLock& VarjoShaderTextureLock::operator=(VarjoShaderTextureLock
         texture_ = std::exchange(other.texture_, varjo_Texture{});
         acquired_ = std::exchange(other.acquired_, false);
         last_error_ = std::move(other.last_error_);
+        VTK_SD_LOG("VarjoShaderTextureLock move assignment new acquired=" << (acquired_ ? "true" : "false") << " textureIndex=" << texture_index_);
     }
     return *this;
 }
@@ -86,6 +105,7 @@ varjo_ShaderType VarjoShaderTextureLock::shaderType() const
 void VarjoShaderTextureLock::release()
 {
     if (acquired_ && session_) {
+        VTK_SD_LOG("varjo_MRReleaseShaderTexture shaderType=" << static_cast<int64_t>(shader_type_) << " textureIndex=" << texture_index_);
         varjo_GetError(session_);
         varjo_MRReleaseShaderTexture(session_, shader_type_, texture_index_);
         const varjo_Error error = varjo_GetError(session_);
@@ -104,6 +124,7 @@ const std::string& VarjoShaderTextureLock::lastError() const
 
 void VarjoShaderTextureLock::acquire()
 {
+    VTK_SD_SCOPE("VarjoShaderTextureLock::acquire");
     if (!session_) {
         setLastError("session is null");
         return;
@@ -125,16 +146,19 @@ void VarjoShaderTextureLock::acquire()
 
     acquired_ = true;
     last_error_.clear();
+    VTK_SD_LOG("shader texture acquired shaderType=" << static_cast<int64_t>(shader_type_) << " textureIndex=" << texture_index_);
 }
 
 void VarjoShaderTextureLock::setLastError(std::string message) const
 {
     last_error_ = std::move(message);
+    VTK_SD_ERROR(last_error_);
 }
 
 VarjoVideoPostProcessShader::VarjoVideoPostProcessShader(varjo_Session* session, bool lockNow)
     : session_(session)
 {
+    VTK_SD_LOG("VarjoVideoPostProcessShader raw constructor session=" << session_ << " lockNow=" << (lockNow ? "true" : "false"));
     if (lockNow) {
         lock();
     }
@@ -144,6 +168,7 @@ VarjoVideoPostProcessShader::VarjoVideoPostProcessShader(std::shared_ptr<varjo_S
     : session_owner_(std::move(session))
     , session_(session_owner_.get())
 {
+    VTK_SD_LOG("VarjoVideoPostProcessShader shared constructor session=" << session_ << " lockNow=" << (lockNow ? "true" : "false"));
     if (lockNow) {
         lock();
     }
@@ -155,6 +180,7 @@ VarjoVideoPostProcessShader::VarjoVideoPostProcessShader(const VarjoSession& ses
 
 VarjoVideoPostProcessShader::~VarjoVideoPostProcessShader()
 {
+    VTK_SD_LOG("VarjoVideoPostProcessShader destructor locked=" << (locked_ ? "true" : "false"));
     unlock();
 }
 
@@ -163,16 +189,20 @@ VarjoVideoPostProcessShader::VarjoVideoPostProcessShader(VarjoVideoPostProcessSh
     , session_(std::exchange(other.session_, nullptr))
     , locked_(std::exchange(other.locked_, false))
     , last_error_(std::move(other.last_error_))
-{}
+{
+    VTK_SD_LOG("VarjoVideoPostProcessShader move constructor session=" << session_ << " locked=" << (locked_ ? "true" : "false"));
+}
 
 VarjoVideoPostProcessShader& VarjoVideoPostProcessShader::operator=(VarjoVideoPostProcessShader&& other) noexcept
 {
     if (this != &other) {
+        VTK_SD_LOG("VarjoVideoPostProcessShader move assignment releasing current locked=" << (locked_ ? "true" : "false"));
         unlock();
         session_owner_ = std::move(other.session_owner_);
         session_ = std::exchange(other.session_, nullptr);
         locked_ = std::exchange(other.locked_, false);
         last_error_ = std::move(other.last_error_);
+        VTK_SD_LOG("VarjoVideoPostProcessShader move assignment new session=" << session_ << " locked=" << (locked_ ? "true" : "false"));
     }
     return *this;
 }
@@ -194,7 +224,9 @@ bool VarjoVideoPostProcessShader::locked() const
 
 bool VarjoVideoPostProcessShader::lock()
 {
+    VTK_SD_SCOPE("VarjoVideoPostProcessShader::lock");
     if (locked_) {
+        VTK_SD_LOG("video post process shader already locked");
         return true;
     }
     if (!session_) {
@@ -209,12 +241,14 @@ bool VarjoVideoPostProcessShader::lock()
     }
 
     last_error_.clear();
+    VTK_SD_LOG("video post process shader lock acquired");
     return true;
 }
 
 void VarjoVideoPostProcessShader::unlock()
 {
     if (locked_ && session_) {
+        VTK_SD_LOG("varjo_Unlock VideoPostProcessShader");
         varjo_Unlock(session_, varjo_LockType_VideoPostProcessShader);
     }
     locked_ = false;
@@ -222,6 +256,7 @@ void VarjoVideoPostProcessShader::unlock()
 
 bool VarjoVideoPostProcessShader::setEnabled(bool enabled)
 {
+    VTK_SD_LOG("set video post process shader enabled=" << (enabled ? "true" : "false"));
     if (!valid()) {
         setLastError("video post process shader is not locked");
         return false;
@@ -239,6 +274,9 @@ bool VarjoVideoPostProcessShader::configureD3D11(ID3D11Device* device, const var
 
 bool VarjoVideoPostProcessShader::configureD3D11(ID3D11Device* device, const varjo_ShaderConfig& config, const void* shaderData, int32_t shaderSize)
 {
+    VTK_SD_SCOPE("VarjoVideoPostProcessShader::configureD3D11");
+    logShaderConfig("configureD3D11 config", config);
+    VTK_SD_LOG("D3D11 device=" << device << " shaderData=" << shaderData << " shaderSize=" << shaderSize);
     if (!valid()) {
         setLastError("video post process shader is not locked");
         return false;
@@ -270,6 +308,9 @@ bool VarjoVideoPostProcessShader::configureD3D12(ID3D12CommandQueue* commandQueu
 
 bool VarjoVideoPostProcessShader::configureD3D12(ID3D12CommandQueue* commandQueue, const varjo_ShaderConfig& config, const void* shaderData, int32_t shaderSize)
 {
+    VTK_SD_SCOPE("VarjoVideoPostProcessShader::configureD3D12");
+    logShaderConfig("configureD3D12 config", config);
+    VTK_SD_LOG("D3D12 commandQueue=" << commandQueue << " shaderData=" << shaderData << " shaderSize=" << shaderSize);
     if (!valid()) {
         setLastError("video post process shader is not locked");
         return false;
@@ -296,6 +337,7 @@ bool VarjoVideoPostProcessShader::configureD3D12(ID3D12CommandQueue* commandQueu
 
 VarjoShaderTextureLock VarjoVideoPostProcessShader::acquireTexture(int32_t textureIndex)
 {
+    VTK_SD_LOG("acquire video post process shader texture index=" << textureIndex);
     if (!valid()) {
         VarjoShaderTextureLock lock;
         setLastError("video post process shader is not locked");
@@ -312,6 +354,7 @@ bool VarjoVideoPostProcessShader::submitInputs(
     int32_t textureIndexCount,
     VarjoShaderConstantBufferView constantBuffer)
 {
+    VTK_SD_LOG("submit shader inputs textureIndexCount=" << textureIndexCount << " constantBufferSize=" << constantBuffer.size << " constantBufferData=" << constantBuffer.data);
     if (!valid()) {
         setLastError("video post process shader is not locked");
         return false;
@@ -361,8 +404,10 @@ bool VarjoVideoPostProcessShader::submitConstantBuffer(VarjoShaderConstantBuffer
 
 std::vector<varjo_TextureFormat> VarjoVideoPostProcessShader::supportedTextureFormats(varjo_RenderAPI renderAPI) const
 {
+    VTK_SD_LOG("query supported shader texture formats renderAPI=" << static_cast<int64_t>(renderAPI));
     std::vector<varjo_TextureFormat> formats;
     if (!session_) {
+        VTK_SD_WARN("supportedTextureFormats called with null session");
         return formats;
     }
 
@@ -370,6 +415,7 @@ std::vector<varjo_TextureFormat> VarjoVideoPostProcessShader::supportedTextureFo
     const int32_t count = varjo_MRGetSupportedShaderTextureFormatCount(session_, renderAPI, varjo_ShaderType_VideoPostProcess);
     const varjo_Error countError = varjo_GetError(session_);
     if (countError != varjo_NoError || count <= 0) {
+        VTK_SD_WARN("supportedTextureFormats count failed or empty count=" << count << " error=" << safeErrorDesc(countError));
         return formats;
     }
 
@@ -378,22 +424,27 @@ std::vector<varjo_TextureFormat> VarjoVideoPostProcessShader::supportedTextureFo
     varjo_MRGetSupportedShaderTextureFormats(session_, renderAPI, varjo_ShaderType_VideoPostProcess, formats.data(), count);
     const varjo_Error formatsError = varjo_GetError(session_);
     if (formatsError != varjo_NoError) {
+        VTK_SD_ERROR("supportedTextureFormats fetch failed: " << safeErrorDesc(formatsError));
         formats.clear();
     }
+    VTK_SD_LOG("supported shader texture format count=" << formats.size());
     return formats;
 }
 
 varjo_DXGITextureFormat VarjoVideoPostProcessShader::toDXGIFormat(varjo_TextureFormat format) const
 {
     if (!session_) {
+        VTK_SD_WARN("toDXGIFormat called with null session");
         return 0;
     }
     varjo_GetError(session_);
     const auto dxgi = varjo_ToDXGIFormat(session_, format);
     const varjo_Error error = varjo_GetError(session_);
     if (error != varjo_NoError) {
+        VTK_SD_ERROR("toDXGIFormat failed format=" << static_cast<int64_t>(format) << " error=" << safeErrorDesc(error));
         return 0;
     }
+    VTK_SD_LOG("toDXGIFormat format=" << static_cast<int64_t>(format) << " dxgi=" << dxgi);
     return dxgi;
 }
 
@@ -415,6 +466,7 @@ varjo_ShaderConfig VarjoVideoPostProcessShader::makeVideoPostProcessConfig(
     config.params.videoPostProcess.computeBlockSize = computeBlockSize;
     config.params.videoPostProcess.samplingMargin = samplingMargin;
     config.params.videoPostProcess.constantBufferSize = constantBufferSize;
+    logShaderConfig("makeVideoPostProcessConfig", config);
     return config;
 }
 
@@ -426,19 +478,23 @@ bool VarjoVideoPostProcessShader::setTextureConfig(
     uint64_t height)
 {
     if (textureIndex < 0 || textureIndex >= kMaxShaderTextureSlots) {
+        VTK_SD_ERROR("setTextureConfig invalid textureIndex=" << textureIndex);
         return false;
     }
     config.params.videoPostProcess.textures[textureIndex].format = format;
     config.params.videoPostProcess.textures[textureIndex].width = width;
     config.params.videoPostProcess.textures[textureIndex].height = height;
+    VTK_SD_LOG("setTextureConfig textureIndex=" << textureIndex << " format=" << static_cast<int64_t>(format) << " size=" << width << 'x' << height);
     return true;
 }
 
 VarjoShaderBytecodeView VarjoVideoPostProcessShader::bytecodeView(const void* data, size_t size)
 {
     if (!data || size == 0 || size > static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
+        VTK_SD_WARN("bytecodeView invalid data=" << data << " size=" << size);
         return {};
     }
+    VTK_SD_LOG("bytecodeView size=" << size);
     return VarjoShaderBytecodeView{data, static_cast<int32_t>(size)};
 }
 
@@ -447,6 +503,7 @@ bool VarjoVideoPostProcessShader::checkNativeError(const char* operation) const
     const varjo_Error error = varjo_GetError(session_);
     if (error == varjo_NoError) {
         last_error_.clear();
+        VTK_SD_LOG((operation ? operation : "operation") << " succeeded");
         return true;
     }
 
@@ -464,4 +521,5 @@ void VarjoVideoPostProcessShader::clearNativeError() const
 void VarjoVideoPostProcessShader::setLastError(std::string message) const
 {
     last_error_ = std::move(message);
+    VTK_SD_ERROR(last_error_);
 }
