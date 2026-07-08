@@ -4,6 +4,14 @@
 #define VARJOTOOLKIT_SUPERDEBUG 0
 #endif
 
+#ifndef VARJOTOOLKIT_SUPERDEBUG_TRACE
+#define VARJOTOOLKIT_SUPERDEBUG_TRACE 0
+#endif
+
+#ifndef VARJOTOOLKIT_SUPERDEBUG_SCOPE
+#define VARJOTOOLKIT_SUPERDEBUG_SCOPE 0
+#endif
+
 #if VARJOTOOLKIT_SUPERDEBUG
 
 #include <chrono>
@@ -95,8 +103,18 @@ private:
 #define VTK_SD_LOG(message_expr) VTK_SD_LOG_LEVEL("INFO", message_expr)
 #define VTK_SD_WARN(message_expr) VTK_SD_LOG_LEVEL("WARN", message_expr)
 #define VTK_SD_ERROR(message_expr) VTK_SD_LOG_LEVEL("ERROR", message_expr)
+
+#if VARJOTOOLKIT_SUPERDEBUG_TRACE
 #define VTK_SD_TRACE(message_expr) VTK_SD_LOG_LEVEL("TRACE", message_expr)
+#else
+#define VTK_SD_TRACE(message_expr) do {} while (false)
+#endif
+
+#if VARJOTOOLKIT_SUPERDEBUG_SCOPE
 #define VTK_SD_SCOPE(name_expr) ::VarjoToolkit::Diagnostics::ScopeLog VTK_SD_CONCAT(vtk_sd_scope_, __LINE__)(name_expr, __FILE__, __LINE__, __func__)
+#else
+#define VTK_SD_SCOPE(name_expr) do {} while (false)
+#endif
 
 #else
 
