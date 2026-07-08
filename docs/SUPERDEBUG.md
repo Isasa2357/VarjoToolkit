@@ -75,7 +75,7 @@ cmake -S . -B out\build\superdebug ^
   -DVARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS=ON ^
   -DVARJOTOOLKIT_ENABLE_SUPERDEBUG=ON
 
-cmake --build out\build\superdebug --config Debug
+cmake --build out\build\superdebug --config Debug --parallel
 ```
 
 ## Run HMD tests with SuperDebug output
@@ -138,6 +138,7 @@ VarjoEventService
 VarjoEventCsvLogger
 VarjoMarkerTrackingService
 VarjoMarkerTrackingCsvLogger
+VarjoIMUService
 ```
 
 ## Implementation notes
