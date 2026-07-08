@@ -8,6 +8,8 @@
   - Added `VARJOTOOLKIT_ENABLE_SUPERDEBUG` CMake option.
   - Enables `VARJOTOOLKIT_SUPERDEBUG=1` only for Debug configuration when the option is ON.
   - Added header-only diagnostics macros in `VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp`.
+  - Default SuperDebug output is limited to external API boundaries, failures, and important state changes.
+  - `VTK_SD_TRACE` and `VTK_SD_SCOPE` are no-op by default to avoid noisy frame/callback logs and keep normal debugging output readable.
   - Added console SuperDebug logging to session, frame info, scoped locks, event queue, data stream, stream buffer lock, chroma key, world, marker tracker, occlusion mesh, swapchain, layer frame, and video post process wrappers.
   - Added console SuperDebug logging to event and marker tracking services, including CSV open/write/close, worker lifecycle, queue overflow, and request/drain operations.
   - Added `docs/SUPERDEBUG.md`.
