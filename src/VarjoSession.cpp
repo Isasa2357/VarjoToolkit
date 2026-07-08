@@ -17,14 +17,12 @@ void shutdownVarjoSession(varjo_Session* session)
 
 VarjoSession::VarjoSession()
 {
-    VTK_SD_SCOPE("VarjoSession::VarjoSession default");
     initialize();
 }
 
 VarjoSession::VarjoSession(std::shared_ptr<varjo_Session> session)
     : session_(std::move(session))
 {
-    VTK_SD_LOG("VarjoSession shared_ptr constructor session=" << session_.get());
     if (!session_) {
         last_error_ = "session is null";
         VTK_SD_WARN(last_error_);
@@ -40,9 +38,7 @@ bool VarjoSession::runtimeAvailable()
 
 bool VarjoSession::initialize()
 {
-    VTK_SD_SCOPE("VarjoSession::initialize");
     if (session_) {
-        VTK_SD_LOG("session already initialized session=" << session_.get());
         last_error_.clear();
         return true;
     }
@@ -75,9 +71,7 @@ void VarjoSession::reset()
 
 bool VarjoSession::valid() const
 {
-    const bool isValid = session_ != nullptr;
-    VTK_SD_TRACE("VarjoSession::valid=" << (isValid ? "true" : "false"));
-    return isValid;
+    return session_ != nullptr;
 }
 
 varjo_Session* VarjoSession::get() const
@@ -96,9 +90,7 @@ varjo_Nanoseconds VarjoSession::currentTime() const
         VTK_SD_WARN("currentTime requested with null session");
         return 0;
     }
-    const auto now = varjo_GetCurrentTime(session_.get());
-    VTK_SD_TRACE("currentTime=" << now);
-    return now;
+    return varjo_GetCurrentTime(session_.get());
 }
 
 int32_t VarjoSession::viewCount() const
@@ -107,9 +99,7 @@ int32_t VarjoSession::viewCount() const
         VTK_SD_WARN("viewCount requested with null session");
         return 0;
     }
-    const auto count = varjo_GetViewCount(session_.get());
-    VTK_SD_LOG("viewCount=" << count);
-    return count;
+    return varjo_GetViewCount(session_.get());
 }
 
 const std::string& VarjoSession::lastError() const
