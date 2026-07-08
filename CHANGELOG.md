@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.3.0 - SuperDebug diagnostics release
+
 ### Added
 
 - SuperDebug console diagnostics mode.
@@ -17,6 +19,10 @@
   - Added occlusion mesh, event queue, world/marker, MR camera property, data stream config, D3D11 swapchain, and D3D12 swapchain HMD tests.
   - Added experimental D3D11/D3D12 Video Post Process Shader HMD tests when `VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS=ON`.
   - Added labels for targeted HMD runs: `hmd`, `mr`, `datastream`, `rendering`, `d3d11`, `d3d12`, `experimental`, and `vpp`.
+
+### Changed
+
+- Bumped project and public version header to `0.3.0`.
 
 ## v0.2.0 - Rendering, package, and video post process release
 
