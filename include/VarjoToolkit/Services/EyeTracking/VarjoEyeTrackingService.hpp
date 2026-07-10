@@ -88,8 +88,8 @@ public:
     std::optional<varjo_Gaze> getRenderingGaze() const;
     std::vector<VarjoEyeTrackingData> getEyeTrackingData();
 
-    uint64_t submittedFrameInfoCount() const;
-    uint64_t droppedFrameInfoCount() const;
+    uint64_t submittedFrameInfoCount() const noexcept;
+    uint64_t droppedFrameInfoCount() const noexcept;
 
 private:
     VarjoProjectedGazePosition calcProjectedGazePositionToVarjoDisplay(
@@ -163,12 +163,12 @@ public:
     uint64_t droppedSampleCount() const noexcept { return dataQueue_.droppedCount(); }
     double getSamplesPerSecond() const { return dataQueue_.samplesPerSecond(); }
 
-    uint64_t submittedFrameInfoCount() const
+    uint64_t submittedFrameInfoCount() const noexcept
     {
         return eyeTracker_.submittedFrameInfoCount();
     }
 
-    uint64_t droppedFrameInfoCount() const
+    uint64_t droppedFrameInfoCount() const noexcept
     {
         return eyeTracker_.droppedFrameInfoCount();
     }
