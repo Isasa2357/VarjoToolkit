@@ -200,6 +200,13 @@ public:
     uint64_t processedSampleCount() const noexcept { return receivedSampleCount(); }
     uint64_t writtenSampleCount() const noexcept { return receivedSampleCount(); }
 
+    // Counts old samples removed only because the bounded application queue was full.
+    // requestData() does not increment this value.
+    uint64_t droppedSampleCount() const noexcept
+    {
+        return dataQueue_.droppedCount();
+    }
+
     double getSamplesPerSecond() const
     {
         return dataQueue_.samplesPerSecond();
