@@ -46,6 +46,32 @@ function(varjotoolkit_configure_service_test target labels)
     )
 endfunction()
 
+if (VARJOTOOLKIT_BUILD_TESTS)
+    add_executable(VarjoToolkitSampleRateUtilitiesTest
+        sample_rate_utilities_test.cpp
+    )
+    target_link_libraries(VarjoToolkitSampleRateUtilitiesTest
+        PRIVATE
+            VarjoToolkit::VarjoToolkit
+    )
+    target_compile_definitions(VarjoToolkitSampleRateUtilitiesTest
+        PRIVATE
+            NOMINMAX
+            WIN32_LEAN_AND_MEAN
+    )
+    if (MSVC)
+        target_compile_options(VarjoToolkitSampleRateUtilitiesTest PRIVATE /utf-8 /W4 /permissive-)
+    else()
+        target_compile_options(VarjoToolkitSampleRateUtilitiesTest PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME VarjoToolkitSampleRateUtilitiesTest COMMAND VarjoToolkitSampleRateUtilitiesTest)
+    set_tests_properties(VarjoToolkitSampleRateUtilitiesTest
+        PROPERTIES
+            LABELS "unit;performance;restart"
+            TIMEOUT 10
+    )
+endif()
+
 if (VARJOTOOLKIT_BUILD_HMD_TESTS)
     varjotoolkit_add_hmd_test(VarjoToolkitHmdCoreSmokeTest
         hmd_core_smoke.cpp
