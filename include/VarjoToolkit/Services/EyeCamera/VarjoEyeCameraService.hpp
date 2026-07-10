@@ -62,15 +62,27 @@ public:
         return frame_queue_.pushedCountForChannel(static_cast<int64_t>(varjo_ChannelIndex_Right));
     }
 
+    uint64_t receivedFrameCount() const
+    {
+        return leftReceivedFrameCount() + rightReceivedFrameCount();
+    }
+
     uint64_t leftProcessedFrameCount() const { return leftFrameCount(); }
     uint64_t rightProcessedFrameCount() const { return rightFrameCount(); }
 
+    uint64_t processedFrameCount() const
+    {
+        return leftProcessedFrameCount() + rightProcessedFrameCount();
+    }
+
     uint64_t successfulWriteCount() const
     {
-        const uint64_t processed = leftFrameCount() + rightFrameCount();
+        const uint64_t processed = processedFrameCount();
         const uint64_t failures = writeFailureCount();
         return processed >= failures ? processed - failures : 0;
     }
+
+    uint64_t writtenFrameCount() const { return successfulWriteCount(); }
 
     double getLeftFramesPerSecond() const
     {
