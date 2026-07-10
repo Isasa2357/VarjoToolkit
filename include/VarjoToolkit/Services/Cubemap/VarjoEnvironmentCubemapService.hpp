@@ -16,7 +16,6 @@
 
 #include <VarjoToolkit/DataStream/VarjoDataStream.hpp>
 #include <VarjoToolkit/DataStream/VarjoDataStreamFrameQueue.hpp>
-#include <VarjoToolkit/Utilities/VarjoSampleRateCounter.hpp>
 
 class VarjoEnvironmentCubemapService {
 public:
@@ -44,13 +43,29 @@ public:
     std::wstring lastError() const;
     Paths paths() const;
 
+    // Legacy processed-frame counter. A processed frame reached the writer
+    // thread; writeFailureCount() reports failed raw writes separately.
     uint64_t frameCount() const;
     uint64_t droppedFrameCount() const;
     uint64_t writeFailureCount() const;
 
+    uint64_t receivedFrameCount() const
+    {
+        return frame_queue_.pushedCount();
+    }
+
+    uint64_t processedFrameCount() const { return frameCount(); }
+
+    uint64_t successfulWriteCount() const
+    {
+        const uint64_t processed = frameCount();
+        const uint64_t failures = writeFailureCount();
+        return processed >= failures ? processed - failures : 0;
+    }
+
     double getFramesPerSecond() const
     {
-        return frame_rate_counter_.update(frameCount());
+        return frame_queue_.pushedRatePerSecond();
     }
 
 private:
@@ -102,7 +117,7 @@ private:
     VarjoDataStreamFrameQueue<CapturedFrame> frame_queue_;
 
     std::thread writer_thread_;
-    std::atomic_bool stop_requested_{ true };
+    std::atomic_bool stop_requested_{true};
 
     mutable std::mutex state_mutex_;
     bool running_ = false;
@@ -111,6 +126,4 @@ private:
     uint64_t frame_count_ = 0;
     uint64_t dropped_frame_count_ = 0;
     uint64_t write_failure_count_ = 0;
-
-    mutable VarjoToolkit::SampleRateCounter frame_rate_counter_;
 };
