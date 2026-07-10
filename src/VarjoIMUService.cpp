@@ -1,14 +1,7 @@
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-
 #include <VarjoToolkit/Services/IMU/VarjoIMUService.hpp>
 
-#include <VarjoToolkit/Core/VarjoFrameInfo.hpp>
 #include <VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp>
 #include <VarjoToolkit/Utilities/VarjoCsv.hpp>
-
-#include <Windows.h>
 
 #include <algorithm>
 #include <chrono>
@@ -21,156 +14,173 @@ namespace {
 
 constexpr double kPi = 3.141592653589793238462643383279502884;
 
-void setCurrentThreadLowPriorityForWaitSync()
-{
-    // This service calls varjo_WaitSync only to sample IMU/head pose and write a
-    // CSV. Keep it below the rendering/camera path priority.
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_LOWEST);
-}
-
-int64_t systemTimeUnixUsFromTimePoint(std::chrono::system_clock::time_point tp)
+int64_t systemTimeUnixUsFromTimePoint(
+    std::chrono::system_clock::time_point timePoint)
 {
     return std::chrono::duration_cast<std::chrono::microseconds>(
-        tp.time_since_epoch()).count();
+        timePoint.time_since_epoch()).count();
 }
 
-std::string formatSystemClockUtcIso8601(std::chrono::system_clock::time_point tp)
+std::string formatSystemClockUtcIso8601(
+    std::chrono::system_clock::time_point timePoint)
 {
-    const auto us_since_epoch = std::chrono::duration_cast<std::chrono::microseconds>(tp.time_since_epoch());
-    const auto sec_since_epoch = std::chrono::duration_cast<std::chrono::seconds>(us_since_epoch);
-    const int micros = static_cast<int>((us_since_epoch - sec_since_epoch).count());
+    const auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+        timePoint.time_since_epoch());
+    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(
+        microseconds);
+    const int fraction = static_cast<int>((microseconds - seconds).count());
 
-    const std::time_t tt = std::chrono::system_clock::to_time_t(tp);
-    std::tm tm{};
-    gmtime_s(&tm, &tt);
+    const std::time_t time = std::chrono::system_clock::to_time_t(timePoint);
+    std::tm utc{};
+    gmtime_s(&utc, &time);
 
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S")
-        << "." << std::setw(6) << std::setfill('0') << micros << "Z";
-    return oss.str();
+    std::ostringstream output;
+    output << std::put_time(&utc, "%Y-%m-%dT%H:%M:%S")
+           << '.' << std::setw(6) << std::setfill('0') << fraction << 'Z';
+    return output.str();
 }
 
-std::string formatSystemClockLocalIso8601(std::chrono::system_clock::time_point tp)
+std::string formatSystemClockLocalIso8601(
+    std::chrono::system_clock::time_point timePoint)
 {
-    const auto us_since_epoch = std::chrono::duration_cast<std::chrono::microseconds>(tp.time_since_epoch());
-    const auto sec_since_epoch = std::chrono::duration_cast<std::chrono::seconds>(us_since_epoch);
-    const int micros = static_cast<int>((us_since_epoch - sec_since_epoch).count());
+    const auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
+        timePoint.time_since_epoch());
+    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(
+        microseconds);
+    const int fraction = static_cast<int>((microseconds - seconds).count());
 
-    const std::time_t tt = std::chrono::system_clock::to_time_t(tp);
-    std::tm tm{};
-    localtime_s(&tm, &tt);
+    const std::time_t time = std::chrono::system_clock::to_time_t(timePoint);
+    std::tm local{};
+    localtime_s(&local, &time);
 
-    std::ostringstream oss;
-    oss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S")
-        << "." << std::setw(6) << std::setfill('0') << micros;
-    return oss.str();
+    std::ostringstream output;
+    output << std::put_time(&local, "%Y-%m-%dT%H:%M:%S")
+           << '.' << std::setw(6) << std::setfill('0') << fraction;
+    return output.str();
 }
 
-int64_t convertVarjoTimeToUnixUs(varjo_Session* session, varjo_Nanoseconds timestamp)
+int64_t convertVarjoTimeToUnixUs(
+    varjo_Session* session,
+    varjo_Nanoseconds timestamp)
 {
-    if (!session || timestamp <= 0) {
-        return 0;
-    }
-    const varjo_Nanoseconds unix_ns = varjo_ConvertToUnixTime(session, timestamp);
-    return static_cast<int64_t>(unix_ns / 1000);
+    if (!session || timestamp <= 0) return 0;
+    return static_cast<int64_t>(
+        varjo_ConvertToUnixTime(session, timestamp) / 1000);
 }
 
 } // namespace
 
 VarjoIMUService::VarjoIMUService(
     const std::shared_ptr<varjo_Session>& session,
-    const std::wstring& csv_output_path,
-    size_t buffer_capacity)
+    const std::wstring& csvOutputPath,
+    size_t bufferCapacity)
     : session_(session)
-    , csv_output_path_(csv_output_path)
-    , buffer_capacity_((buffer_capacity > min_buffer_capacity_) ? buffer_capacity : min_buffer_capacity_)
+    , csv_output_path_(csvOutputPath)
+    , buffer_capacity_(std::max(bufferCapacity, min_buffer_capacity_))
+    , pending_capacity_(std::max<size_t>(buffer_capacity_ * 2, 8))
 {
     VTK_SD_LOG("VarjoIMUService constructor session=" << session_.get()
         << " csv=" << csv_output_path_.string()
-        << " bufferCapacity=" << buffer_capacity_);
+        << " bufferCapacity=" << buffer_capacity_
+        << " pendingCapacity=" << pending_capacity_);
 }
 
 VarjoIMUService::~VarjoIMUService()
 {
-    bool running = false;
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        running = running_;
-    }
-    VTK_SD_LOG("VarjoIMUService destructor running=" << (running ? "true" : "false"));
     stop();
 }
 
-bool VarjoIMUService::start(bool waitFillBuffer)
+bool VarjoIMUService::start()
 {
-    VTK_SD_LOG("VarjoIMUService::start waitFillBuffer=" << (waitFillBuffer ? "true" : "false"));
     stop();
 
     if (varjo_IsAvailable() == varjo_False) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         last_error_ = L"varjo_IsAvailable returned false";
-        VTK_SD_ERROR("VarjoIMUService start failed: varjo_IsAvailable returned false");
         return false;
     }
-
     if (!session_) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         last_error_ = L"session is null";
-        VTK_SD_ERROR("VarjoIMUService start failed: session is null");
         return false;
     }
-
-    if (!openLogFile()) {
-        return false;
-    }
+    if (!openLogFile()) return false;
 
     {
-        std::lock_guard<std::mutex> buffer_lock(imu_buffer_mutex_);
+        std::lock_guard<std::mutex> lock(pending_mutex_);
+        pending_frames_.clear();
+    }
+    {
+        std::lock_guard<std::mutex> lock(imu_buffer_mutex_);
         imu_buffer_.clear();
         previous_data_ = VarjoIMUData{};
     }
 
+    received_count_.store(0);
+    processed_count_.store(0);
+    written_count_.store(0);
+    dropped_count_.store(0);
+    sample_rate_counter_.reset();
+
     {
-        std::lock_guard<std::mutex> state_lock(state_mutex_);
-        row_count_ = 0;
-        running_ = true;
+        std::lock_guard<std::mutex> lock(state_mutex_);
         last_error_.clear();
+        running_ = true;
     }
 
     stop_requested_.store(false);
     worker_ = std::thread(&VarjoIMUService::workerMain, this);
-    SetThreadPriority(static_cast<HANDLE>(worker_.native_handle()), THREAD_PRIORITY_LOWEST);
-    VTK_SD_LOG("VarjoIMUService worker thread started bufferCapacity=" << buffer_capacity_);
-
-    if (waitFillBuffer) {
-        VTK_SD_LOG("VarjoIMUService waiting for buffer fill target=" << bufferCapacity());
-        while (!stop_requested_.load() && bufferSize() < bufferCapacity()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        }
-        VTK_SD_LOG("VarjoIMUService buffer fill wait completed size=" << bufferSize());
-    }
-
+    VTK_SD_LOG("VarjoIMUService external-frame worker started");
     return true;
 }
 
 void VarjoIMUService::stop()
 {
-    bool running = false;
-    {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        running = running_;
-    }
-    VTK_SD_LOG("VarjoIMUService::stop running=" << (running ? "true" : "false"));
     stop_requested_.store(true);
-    if (worker_.joinable()) {
-        VTK_SD_LOG("joining VarjoIMUService worker thread");
-        worker_.join();
-    }
-
+    pending_cv_.notify_all();
+    if (worker_.joinable()) worker_.join();
     closeLogFile();
 
     std::lock_guard<std::mutex> lock(state_mutex_);
     running_ = false;
+}
+
+bool VarjoIMUService::submitFrameInfo(
+    const VarjoFrameInfoSnapshot& snapshot)
+{
+    if (!snapshot.valid ||
+        !snapshot.centerPoseValid ||
+        snapshot.displayTime <= 0) {
+        VTK_SD_WARN("VarjoIMUService rejected invalid external frame info");
+        return false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(state_mutex_);
+        if (!running_) return false;
+    }
+
+    PendingFrame pending{};
+    pending.snapshot = snapshot;
+    pending.system_time = std::chrono::system_clock::now();
+    pending.system_unix_us = systemTimeUnixUsFromTimePoint(
+        pending.system_time);
+    pending.varjo_now = varjo_GetCurrentTime(session_.get());
+    pending.varjo_now_unix_us = convertVarjoTimeToUnixUs(
+        session_.get(),
+        pending.varjo_now);
+
+    {
+        std::lock_guard<std::mutex> lock(pending_mutex_);
+        while (pending_frames_.size() >= pending_capacity_) {
+            pending_frames_.pop_front();
+            dropped_count_.fetch_add(1);
+        }
+        pending_frames_.push_back(std::move(pending));
+        received_count_.fetch_add(1);
+    }
+    pending_cv_.notify_one();
+    return true;
 }
 
 size_t VarjoIMUService::bufferSize() const
@@ -181,8 +191,7 @@ size_t VarjoIMUService::bufferSize() const
 
 uint64_t VarjoIMUService::rowCount() const
 {
-    std::lock_guard<std::mutex> lock(state_mutex_);
-    return row_count_;
+    return written_count_.load();
 }
 
 std::wstring VarjoIMUService::outputPath() const
@@ -199,53 +208,44 @@ std::wstring VarjoIMUService::lastError() const
 VarjoIMUService::VarjoIMUData VarjoIMUService::latestData() const
 {
     std::lock_guard<std::mutex> lock(imu_buffer_mutex_);
-    if (imu_buffer_.empty()) {
-        return VarjoIMUData{};
-    }
-    return imu_buffer_.back();
+    return imu_buffer_.empty() ? VarjoIMUData{} : imu_buffer_.back();
 }
 
-std::deque<VarjoIMUService::VarjoIMUData> VarjoIMUService::requestBufferedData() const
+std::deque<VarjoIMUService::VarjoIMUData>
+VarjoIMUService::requestBufferedData() const
 {
     std::lock_guard<std::mutex> lock(imu_buffer_mutex_);
-    VTK_SD_LOG("VarjoIMUService::requestBufferedData size=" << imu_buffer_.size());
     return imu_buffer_;
 }
 
 bool VarjoIMUService::openLogFile()
 {
-    VTK_SD_LOG("VarjoIMUService::openLogFile path=" << csv_output_path_.string());
     closeLogFile();
-
     if (csv_output_path_.empty()) {
         std::lock_guard<std::mutex> lock(state_mutex_);
         last_error_ = L"CSV output path is empty";
-        VTK_SD_ERROR("VarjoIMUService openLogFile failed: CSV output path is empty");
         return false;
     }
 
     const auto parent = csv_output_path_.parent_path();
     if (!parent.empty()) {
-        std::error_code ec;
-        std::filesystem::create_directories(parent, ec);
-        if (ec) {
-            VTK_SD_WARN("create_directories failed path=" << parent.string() << " message=" << ec.message());
-        }
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(log_mutex_);
-        logfile_.open(csv_output_path_, std::ios::out | std::ios::trunc);
-        if (!logfile_.is_open()) {
-            std::lock_guard<std::mutex> state_lock(state_mutex_);
-            last_error_ = L"failed to open IMU CSV: " + csv_output_path_.wstring();
-            VTK_SD_ERROR("failed to open IMU CSV path=" << csv_output_path_.string());
+        std::error_code error;
+        std::filesystem::create_directories(parent, error);
+        if (error) {
+            std::lock_guard<std::mutex> lock(state_mutex_);
+            last_error_ = L"failed to create IMU output directory";
             return false;
         }
-        writeHeader();
     }
 
-    VTK_SD_LOG("IMU CSV opened path=" << csv_output_path_.string());
+    std::lock_guard<std::mutex> lock(log_mutex_);
+    logfile_.open(csv_output_path_, std::ios::out | std::ios::trunc);
+    if (!logfile_.is_open()) {
+        std::lock_guard<std::mutex> stateLock(state_mutex_);
+        last_error_ = L"failed to open IMU CSV: " + csv_output_path_.wstring();
+        return false;
+    }
+    writeHeader();
     return true;
 }
 
@@ -253,7 +253,6 @@ void VarjoIMUService::closeLogFile()
 {
     std::lock_guard<std::mutex> lock(log_mutex_);
     if (logfile_.is_open()) {
-        VTK_SD_LOG("closing IMU CSV path=" << csv_output_path_.string());
         logfile_.flush();
         logfile_.close();
     }
@@ -274,127 +273,103 @@ void VarjoIMUService::writeHeader()
         << "position_x,position_y,position_z,"
         << "euler_x_deg,euler_y_deg,euler_z_deg,"
         << "angular_velocity_x_deg_s,angular_velocity_y_deg_s,angular_velocity_z_deg_s";
-
-    for (int i = 0; i < 16; ++i) {
-        logfile_ << ",pose_m" << i;
+    for (int index = 0; index < 16; ++index) {
+        logfile_ << ",pose_m" << index;
     }
-    logfile_ << "\n";
+    logfile_ << '\n';
 }
 
-void VarjoIMUService::writeRow(const VarjoIMUData& data)
+bool VarjoIMUService::writeRow(
+    const VarjoIMUData& data,
+    uint64_t rowIndex)
 {
     std::lock_guard<std::mutex> lock(log_mutex_);
-    if (!logfile_.is_open()) {
-        VTK_SD_WARN("writeRow skipped because IMU CSV is not open");
-        return;
-    }
-
-    uint64_t row_index = 0;
-    {
-        std::lock_guard<std::mutex> state_lock(state_mutex_);
-        row_index = row_count_;
-    }
+    if (!logfile_.is_open()) return false;
 
     logfile_
-        << row_index << ","
-        << data.system_unix_us << ","
-        << formatSystemClockUtcIso8601(data.system_time) << ","
-        << formatSystemClockLocalIso8601(data.system_time) << ","
-        << data.varjo_now << ","
-        << data.varjo_now_unix_us << ","
-        << data.frame_number << ","
-        << data.frame_display_time << ","
-        << data.frame_display_time_unix_us << ","
-        << VarjoToolkit::Csv::toCsv(data.position) << ","
-        << VarjoToolkit::Csv::toCsv(data.euler_deg) << ","
-        << VarjoToolkit::Csv::toCsv(data.angular_velocity) << ","
+        << rowIndex << ','
+        << data.system_unix_us << ','
+        << formatSystemClockUtcIso8601(data.system_time) << ','
+        << formatSystemClockLocalIso8601(data.system_time) << ','
+        << data.varjo_now << ','
+        << data.varjo_now_unix_us << ','
+        << data.frame_number << ','
+        << data.frame_display_time << ','
+        << data.frame_display_time_unix_us << ','
+        << VarjoToolkit::Csv::toCsv(data.position) << ','
+        << VarjoToolkit::Csv::toCsv(data.euler_deg) << ','
+        << VarjoToolkit::Csv::toCsv(data.angular_velocity) << ','
         << VarjoToolkit::Csv::toCsv(data.pose)
-        << "\n";
+        << '\n';
+    return static_cast<bool>(logfile_);
 }
 
-VarjoIMUService::VarjoIMUData VarjoIMUService::sampleOnce()
+VarjoIMUService::VarjoIMUData VarjoIMUService::makeData(
+    const PendingFrame& pending)
 {
     VarjoIMUData data{};
-    if (!session_) {
-        VTK_SD_ERROR("VarjoIMUService::sampleOnce called with null session");
+    if (!pending.snapshot.valid || !pending.snapshot.centerPoseValid) {
         return data;
     }
 
-    VarjoFrameInfo frame_info(session_);
-    if (!frame_info) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        last_error_ = L"VarjoFrameInfo failed to create varjo_FrameInfo";
-        VTK_SD_ERROR("VarjoIMUService sampleOnce failed: VarjoFrameInfo creation failed");
-        return data;
-    }
-
-    data.system_time = std::chrono::system_clock::now();
-    data.system_unix_us = systemTimeUnixUsFromTimePoint(data.system_time);
-    data.varjo_now = varjo_GetCurrentTime(session_.get());
-    data.varjo_now_unix_us = convertVarjoTimeToUnixUs(session_.get(), data.varjo_now);
-
-    if (!frame_info.waitSync()) {
-        std::lock_guard<std::mutex> lock(state_mutex_);
-        last_error_ = L"VarjoFrameInfo::waitSync failed";
-        VTK_SD_ERROR("VarjoIMUService sampleOnce failed: waitSync failed");
-        return data;
-    }
-
-    data.frame_number = frame_info.frameNumber();
-    data.frame_display_time = frame_info.displayTime();
-    data.frame_display_time_unix_us = convertVarjoTimeToUnixUs(session_.get(), data.frame_display_time);
-    data.frame_info = frame_info.snapshot();
-
-    data.pose = varjo_FrameGetPose(session_.get(), varjo_PoseType_Center);
+    data.system_time = pending.system_time;
+    data.system_unix_us = pending.system_unix_us;
+    data.varjo_now = pending.varjo_now;
+    data.varjo_now_unix_us = pending.varjo_now_unix_us;
+    data.frame_number = pending.snapshot.frameNumber;
+    data.frame_display_time = pending.snapshot.displayTime;
+    data.frame_display_time_unix_us = convertVarjoTimeToUnixUs(
+        session_.get(),
+        data.frame_display_time);
+    data.frame_info = pending.snapshot;
+    data.pose = pending.snapshot.centerPose;
     data.position = varjo_GetPosition(&data.pose);
 
-    const auto euler_rad = varjo_GetEulerAngles(
+    const auto eulerRadians = varjo_GetEulerAngles(
         &data.pose,
         varjo_EulerOrder_XYZ,
         varjo_RotationDirection_CounterClockwise,
         varjo_Handedness_RightHanded);
-
     data.euler_deg = varjo_Vector3D{
-        euler_rad.x * 180.0 / kPi,
-        euler_rad.y * 180.0 / kPi,
-        euler_rad.z * 180.0 / kPi
-    };
-
-    {
-        std::lock_guard<std::mutex> lock(imu_buffer_mutex_);
-        if (previous_data_.valid) {
-            const double delta_time_sec = std::chrono::duration_cast<std::chrono::duration<double>>(
-                data.system_time - previous_data_.system_time).count();
-            if (delta_time_sec > 1.0e-9) {
-                data.angular_velocity = varjo_Vector3D{
-                    (data.euler_deg.x - previous_data_.euler_deg.x) / delta_time_sec,
-                    (data.euler_deg.y - previous_data_.euler_deg.y) / delta_time_sec,
-                    (data.euler_deg.z - previous_data_.euler_deg.z) / delta_time_sec
-                };
-            }
-        }
-        previous_data_ = data;
-    }
-
+        eulerRadians.x * 180.0 / kPi,
+        eulerRadians.y * 180.0 / kPi,
+        eulerRadians.z * 180.0 / kPi};
     data.valid = true;
     return data;
 }
 
 void VarjoIMUService::workerMain()
 {
-    VTK_SD_LOG("VarjoIMUService worker started");
-    setCurrentThreadLowPriorityForWaitSync();
+    VTK_SD_LOG("VarjoIMUService worker started without WaitSync");
 
-    while (!stop_requested_.load()) {
-        const VarjoIMUData data = sampleOnce();
-        if (!data.valid) {
-            VTK_SD_TRACE("VarjoIMUService invalid sample; sleeping briefly");
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            continue;
+    for (;;) {
+        PendingFrame pending{};
+        {
+            std::unique_lock<std::mutex> lock(pending_mutex_);
+            pending_cv_.wait(lock, [this]() {
+                return stop_requested_.load() || !pending_frames_.empty();
+            });
+            if (stop_requested_.load() && pending_frames_.empty()) break;
+            pending = std::move(pending_frames_.front());
+            pending_frames_.pop_front();
         }
+
+        VarjoIMUData data = makeData(pending);
+        if (!data.valid) continue;
 
         {
             std::lock_guard<std::mutex> lock(imu_buffer_mutex_);
+            if (previous_data_.valid) {
+                const double deltaSeconds =
+                    std::chrono::duration<double>(
+                        data.system_time - previous_data_.system_time).count();
+                if (deltaSeconds > 1.0e-9) {
+                    data.angular_velocity = varjo_Vector3D{
+                        (data.euler_deg.x - previous_data_.euler_deg.x) / deltaSeconds,
+                        (data.euler_deg.y - previous_data_.euler_deg.y) / deltaSeconds,
+                        (data.euler_deg.z - previous_data_.euler_deg.z) / deltaSeconds};
+                }
+            }
             previous_data_ = data;
             imu_buffer_.push_back(data);
             while (imu_buffer_.size() > buffer_capacity_) {
@@ -402,13 +377,19 @@ void VarjoIMUService::workerMain()
             }
         }
 
-        writeRow(data);
-
-        {
+        processed_count_.fetch_add(1);
+        const uint64_t rowIndex = written_count_.load();
+        if (writeRow(data, rowIndex)) {
+            written_count_.fetch_add(1);
+        } else {
             std::lock_guard<std::mutex> lock(state_mutex_);
-            ++row_count_;
+            last_error_ = L"failed to write IMU CSV row";
         }
     }
 
-    VTK_SD_LOG("VarjoIMUService worker stopped rowCount=" << rowCount() << " bufferSize=" << bufferSize());
+    VTK_SD_LOG("VarjoIMUService worker stopped received="
+        << received_count_.load()
+        << " processed=" << processed_count_.load()
+        << " written=" << written_count_.load()
+        << " dropped=" << dropped_count_.load());
 }
