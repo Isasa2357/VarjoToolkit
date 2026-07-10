@@ -33,6 +33,15 @@ function(varjotoolkit_add_hmd_test target)
     add_test(NAME ${target} COMMAND ${target})
 endfunction()
 
+function(varjotoolkit_configure_service_test target labels)
+    set_tests_properties(${target}
+        PROPERTIES
+            LABELS "${labels}"
+            SKIP_RETURN_CODE 125
+            TIMEOUT 30
+    )
+endfunction()
+
 if (VARJOTOOLKIT_BUILD_HMD_TESTS)
     varjotoolkit_add_hmd_test(VarjoToolkitHmdCoreSmokeTest
         hmd_core_smoke.cpp
@@ -75,5 +84,45 @@ if (VARJOTOOLKIT_BUILD_HMD_TESTS)
     set_tests_properties(VarjoToolkitHmdD3D12SwapChainSmokeTest
         PROPERTIES
             LABELS "hmd;rendering;d3d12"
+    )
+
+    varjotoolkit_add_hmd_test(VarjoToolkitHmdVstServiceSmokeTest
+        hmd_vst_service_smoke.cpp
+    )
+    varjotoolkit_configure_service_test(
+        VarjoToolkitHmdVstServiceSmokeTest
+        "hmd;service;camera;vst;performance"
+    )
+
+    varjotoolkit_add_hmd_test(VarjoToolkitHmdEyeCameraServiceSmokeTest
+        hmd_eye_camera_service_smoke.cpp
+    )
+    varjotoolkit_configure_service_test(
+        VarjoToolkitHmdEyeCameraServiceSmokeTest
+        "hmd;service;camera;eyecamera;performance;optional"
+    )
+
+    varjotoolkit_add_hmd_test(VarjoToolkitHmdCubemapServiceSmokeTest
+        hmd_cubemap_service_smoke.cpp
+    )
+    varjotoolkit_configure_service_test(
+        VarjoToolkitHmdCubemapServiceSmokeTest
+        "hmd;service;camera;cubemap;performance;optional"
+    )
+
+    varjotoolkit_add_hmd_test(VarjoToolkitHmdImuServiceSmokeTest
+        hmd_imu_service_smoke.cpp
+    )
+    varjotoolkit_configure_service_test(
+        VarjoToolkitHmdImuServiceSmokeTest
+        "hmd;service;sensor;imu;performance"
+    )
+
+    varjotoolkit_add_hmd_test(VarjoToolkitHmdEyeTrackingServiceSmokeTest
+        hmd_eye_tracking_service_smoke.cpp
+    )
+    varjotoolkit_configure_service_test(
+        VarjoToolkitHmdEyeTrackingServiceSmokeTest
+        "hmd;service;sensor;gaze;performance;optional"
     )
 endif()
