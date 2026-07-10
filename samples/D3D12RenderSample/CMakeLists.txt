@@ -11,6 +11,13 @@ target_link_libraries(VarjoD3D12RenderSample
         d3dcompiler
 )
 
+# Varjo exposes the runtime adapter LUID through varjo_D3D11GetLuid for both
+# Direct3D backends. Make its declaration available to the D3D12 sample.
+target_precompile_headers(VarjoD3D12RenderSample
+    PRIVATE
+        <Varjo_d3d11.h>
+)
+
 target_compile_definitions(VarjoD3D12RenderSample
     PRIVATE
         NOMINMAX
