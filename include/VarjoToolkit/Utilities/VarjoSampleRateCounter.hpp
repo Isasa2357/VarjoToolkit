@@ -40,6 +40,11 @@ public:
         samples_per_second_ = 0.0;
     }
 
+    void resetPerformance() noexcept
+    {
+        reset(0);
+    }
+
 private:
     using Clock = std::chrono::steady_clock;
 
