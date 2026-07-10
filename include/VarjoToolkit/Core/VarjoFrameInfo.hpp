@@ -8,27 +8,29 @@
 
 #include <VarjoToolkit/Core/VarjoSession.hpp>
 
-// Copyable snapshot of varjo_FrameInfo.
+// Copyable snapshot of one externally synchronized Varjo frame.
 //
-// varjo_FrameInfo itself is allocated/freed through the Varjo C API. This
-// snapshot is safe to store in buffers, queues, logs, and service data objects.
+// VarjoToolkit does not call varjo_WaitSync. The rendering owner must update the
+// wrapped varjo_FrameInfo, then call snapshot() and distribute the result to
+// services that need frame timing, views, or head pose.
 struct VarjoFrameInfoSnapshot {
     std::vector<varjo_ViewInfo> views;
     varjo_Nanoseconds displayTime = 0;
     int64_t frameNumber = 0;
+
+    // Center pose associated with the synchronized frame. snapshot() reads this
+    // through varjo_FrameGetPose after the external owner has called WaitSync.
+    varjo_Matrix centerPose{};
+    bool centerPoseValid = false;
+
     bool valid = false;
 };
 
-// RAII wrapper for varjo_FrameInfo.
+// RAII wrapper for the storage owned by varjo_FrameInfo.
 //
-// This class owns a varjo_FrameInfo* created with varjo_CreateFrameInfo and frees
-// it with varjo_FreeFrameInfo. waitSync() updates the owned frame info through
-// varjo_WaitSync.
-//
-// Construction is intentionally flexible:
-// - varjo_Session* is accepted for non-owning interop with raw Varjo C API code.
-// - std::shared_ptr<varjo_Session> is accepted for existing service-style code.
-// - VarjoSession is accepted for new Toolkit RAII code.
+// This class only allocates, exposes, snapshots, and frees varjo_FrameInfo. It
+// intentionally has no waitSync method: frame pacing belongs to the renderer or
+// another single external synchronization owner.
 class VarjoFrameInfo {
 public:
     explicit VarjoFrameInfo(varjo_Session* session);
@@ -45,8 +47,6 @@ public:
     bool valid() const;
     explicit operator bool() const { return valid(); }
 
-    bool waitSync();
-
     varjo_Session* session() const;
     std::shared_ptr<varjo_Session> sharedSession() const;
     bool ownsSession() const;
@@ -61,6 +61,7 @@ public:
     varjo_Nanoseconds displayTime() const;
     int64_t frameNumber() const;
 
+    // The caller must invoke varjo_WaitSync(session(), get()) before snapshot().
     VarjoFrameInfoSnapshot snapshot() const;
 
 private:
