@@ -55,25 +55,32 @@ void runEyeTrackingServiceSmokeTest()
     vtk_hmd_service_test::StopGuard<VarjoEyeTrackingService> stopGuard(service);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(1250));
+    const double warmupReportedRate = service.getSamplesPerSecond();
     const auto warmupSamples = service.requestData();
-    std::cout << "Eye tracking warmup samples=" << warmupSamples.size() << '\n';
+    std::cout
+        << "Eye tracking warmup samples=" << warmupSamples.size()
+        << " getterSamplesPerSecond=" << warmupReportedRate
+        << '\n';
 
     const auto measurementStart = std::chrono::steady_clock::now();
     std::this_thread::sleep_for(std::chrono::milliseconds(1250));
+    const double getterSamplesPerSecond = service.getSamplesPerSecond();
     const auto measuredSamples = service.requestData();
     const double elapsedSeconds = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - measurementStart).count();
-    const double samplesPerSecond = static_cast<double>(measuredSamples.size()) / elapsedSeconds;
+    const double observedSamplesPerSecond = static_cast<double>(measuredSamples.size()) / elapsedSeconds;
 
     std::cout
         << "Eye tracking measured samples=" << measuredSamples.size()
         << " elapsedSeconds=" << elapsedSeconds
-        << " samplesPerSecond=" << samplesPerSecond
+        << " observedSamplesPerSecond=" << observedSamplesPerSecond
+        << " getterSamplesPerSecond=" << getterSamplesPerSecond
         << '\n';
 
     VTK_HMD_TEST_REQUIRE(!warmupSamples.empty() || !measuredSamples.empty());
     VTK_HMD_TEST_REQUIRE(!measuredSamples.empty());
-    VTK_HMD_TEST_REQUIRE(samplesPerSecond > 0.0);
+    VTK_HMD_TEST_REQUIRE(observedSamplesPerSecond > 0.0);
+    VTK_HMD_TEST_REQUIRE(getterSamplesPerSecond > 0.0);
 
     const auto& sample = measuredSamples.back();
     VTK_HMD_TEST_REQUIRE(sample.gaze.captureTime > 0);
