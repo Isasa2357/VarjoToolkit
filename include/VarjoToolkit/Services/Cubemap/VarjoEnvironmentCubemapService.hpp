@@ -16,6 +16,7 @@
 
 #include <VarjoToolkit/DataStream/VarjoDataStream.hpp>
 #include <VarjoToolkit/DataStream/VarjoDataStreamFrameQueue.hpp>
+#include <VarjoToolkit/Utilities/VarjoSampleRateCounter.hpp>
 
 class VarjoEnvironmentCubemapService {
 public:
@@ -46,6 +47,11 @@ public:
     uint64_t frameCount() const;
     uint64_t droppedFrameCount() const;
     uint64_t writeFailureCount() const;
+
+    double getFramesPerSecond() const
+    {
+        return frame_rate_counter_.update(frameCount());
+    }
 
 private:
     struct CapturedFrame {
@@ -105,4 +111,6 @@ private:
     uint64_t frame_count_ = 0;
     uint64_t dropped_frame_count_ = 0;
     uint64_t write_failure_count_ = 0;
+
+    mutable VarjoToolkit::SampleRateCounter frame_rate_counter_;
 };
