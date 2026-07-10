@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(VarjoToolkit VERSION 0.4.0 LANGUAGES CXX)
+project(VarjoToolkit VERSION 0.5.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
@@ -11,7 +11,6 @@ option(VARJOTOOLKIT_BUILD_HMD_TESTS "Build tests that require Varjo Base and a c
 option(VARJOTOOLKIT_ENABLE_EXPERIMENTAL_MR_POSTPROCESS "Build experimental Varjo video post process shader wrapper" ON)
 option(VARJOTOOLKIT_ENABLE_SUPERDEBUG "Enable verbose console SuperDebug diagnostics in Debug builds" OFF)
 
-# Backward compatibility for the previous option name.
 if (DEFINED VARJOSERVICES_BUILD_SAMPLES)
     set(VARJOTOOLKIT_BUILD_SAMPLES ${VARJOSERVICES_BUILD_SAMPLES})
 endif()
