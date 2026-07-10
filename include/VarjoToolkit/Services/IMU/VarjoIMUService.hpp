@@ -15,6 +15,7 @@
 #include <thread>
 
 #include <VarjoToolkit/Core/VarjoFrameInfo.hpp>
+#include <VarjoToolkit/Utilities/VarjoSampleRateCounter.hpp>
 
 // Service-style IMU/head-pose logger.
 //
@@ -62,6 +63,11 @@ public:
     std::wstring outputPath() const;
     std::wstring lastError() const;
 
+    double getSamplesPerSecond() const
+    {
+        return sample_rate_counter_.update(rowCount());
+    }
+
     VarjoIMUData latestData() const;
     std::deque<VarjoIMUData> requestBufferedData() const;
 
@@ -96,4 +102,6 @@ private:
     bool running_ = false;
     uint64_t row_count_ = 0;
     std::wstring last_error_;
+
+    mutable VarjoToolkit::SampleRateCounter sample_rate_counter_;
 };
