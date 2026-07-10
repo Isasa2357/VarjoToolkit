@@ -11,6 +11,7 @@
 
 #include <Windows.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
@@ -35,6 +36,24 @@ inline bool optionalServicesAreRequired()
 {
     const char* value = std::getenv("VARJOTOOLKIT_REQUIRE_OPTIONAL_HMD_SERVICES");
     return value != nullptr && std::string(value) == "1";
+}
+
+inline int restartCycleCount()
+{
+    constexpr int defaultCycles = 3;
+    constexpr int maximumCycles = 20;
+
+    const char* value = std::getenv("VARJOTOOLKIT_HMD_RESTART_CYCLES");
+    if (!value || *value == '\0') {
+        return defaultCycles;
+    }
+
+    try {
+        const int parsed = std::stoi(value);
+        return std::clamp(parsed, 1, maximumCycles);
+    } catch (...) {
+        return defaultCycles;
+    }
 }
 
 [[noreturn]] inline void skipOrFail(const std::string& message)
