@@ -62,15 +62,23 @@ void testRunResetSignal()
     samples.push_back(2);
     REQUIRE(samples.size() == 2);
     REQUIRE(samples.receivedCount() == 2);
+    REQUIRE(samples.droppedCount() == 0);
+
+    samples.pop_front();
+    REQUIRE(samples.size() == 1);
+    REQUIRE(samples.receivedCount() == 2);
+    REQUIRE(samples.droppedCount() == 1);
 
     signal.store(false);
     REQUIRE(!signal.load());
     REQUIRE(samples.empty());
     REQUIRE(samples.receivedCount() == 0);
+    REQUIRE(samples.droppedCount() == 0);
     REQUIRE(samples.samplesPerSecond() == 0.0);
 
     samples.push_back(3);
     REQUIRE(samples.receivedCount() == 1);
+    REQUIRE(samples.droppedCount() == 0);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(1050));
     REQUIRE(samples.samplesPerSecond() > 0.0);
@@ -82,6 +90,7 @@ void testRunResetSignal()
     signal.store(false);
     REQUIRE(samples.empty());
     REQUIRE(samples.receivedCount() == 0);
+    REQUIRE(samples.droppedCount() == 0);
     REQUIRE(samples.samplesPerSecond() == 0.0);
 }
 
