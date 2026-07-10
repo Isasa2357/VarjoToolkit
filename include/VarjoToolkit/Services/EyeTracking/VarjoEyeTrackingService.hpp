@@ -193,6 +193,30 @@ public:
 
     std::deque<VarjoEyeTrackingData> requestData();
 
+    // Returns the number of gaze samples currently present in the queue whose
+    // capture timestamps fall within the latest one-second interval.
+    // The default queue size (1000) is sufficient for the supported 100/200 Hz modes.
+    double getSamplesPerSecond()
+    {
+        std::lock_guard<std::mutex> lock(this->dataQueueMutex_);
+        if (this->dataQueue_.empty()) {
+            return 0.0;
+        }
+
+        constexpr varjo_Nanoseconds oneSecond = 1'000'000'000;
+        const varjo_Nanoseconds newest = this->dataQueue_.back().gaze.captureTime;
+        const varjo_Nanoseconds cutoff = newest > oneSecond ? newest - oneSecond : 0;
+
+        uint64_t samples = 0;
+        for (auto it = this->dataQueue_.rbegin(); it != this->dataQueue_.rend(); ++it) {
+            if (it->gaze.captureTime < cutoff) {
+                break;
+            }
+            ++samples;
+        }
+        return static_cast<double>(samples);
+    }
+
 private:
 
     void dataRequestWorker();
