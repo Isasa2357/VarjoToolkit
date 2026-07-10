@@ -1,23 +1,23 @@
 #pragma once
 
-#include <memory>
-#include <optional>
-#include <vector>
-#include <string>
-#include <thread>
-#include <mutex>
-#include <iterator>
-#include <algorithm>
-#include <atomic>
-#include <cstdint>
-#include <utility>
-#include <filesystem>
-#include <fstream>
-#include <chrono>
-#include <deque>
-
 #include <Varjo.h>
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <deque>
+#include <filesystem>
+#include <fstream>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
+#include <VarjoToolkit/Core/VarjoFrameInfo.hpp>
 #include <VarjoToolkit/Utilities/VarjoRunCountingDeque.hpp>
 #include <VarjoToolkit/Utilities/VarjoRunResetSignal.hpp>
 
@@ -30,105 +30,79 @@ struct VarjoProjectedGazePosition {
 
 struct FrameInfo {
     std::vector<varjo_ViewInfo> views;
-    varjo_Nanoseconds displayTime;
-    int64_t frameNumber;
+    varjo_Nanoseconds displayTime = 0;
+    int64_t frameNumber = 0;
 };
 
 struct VarjoEyeTrackingData {
-    varjo_Gaze gaze;                                                                // 通常GazeのRayやステータス
-    varjo_EyeMeasurements measurements;                                             // ユーザの眼の瞳孔や光彩の計測
-    std::optional<double> userIPD;                                                  // ユーザのIPD
-    std::optional<double> hmdIPD;                                                   // HMDが設定しているIPD
-    std::string ipdAdjustmentMode;                                                  // 多分HMDのIPDの設定モード
-    std::optional<varjo_Gaze> renderingGaze;                                        // レンダリング向けのGazeのRayやステータス
-    VarjoProjectedGazePosition gazePos_toVideo;                                     // 通常Gazeから計算した2D動画向けの視線位置
-    std::optional<VarjoProjectedGazePosition> renderingGazePos_toVideo;             // renderingGazeから計算した2D動画向けの視線位置
-    VarjoProjectedGazePosition gazePos_toVarjoDisplay;                              // 通常Gazeから計算したVarjoディスプレイ向けの視線位置
-    std::optional<VarjoProjectedGazePosition> renderingGazePos_toVarjoDisplay;      // renderingGazeから計算したVarjoディスプレイ向けの視線位置
-    FrameInfo frameInfo;                                                            // 視線を取得した時のフレーム情報
-    std::optional<FrameInfo> renderingGazeFrameInfo;                                // renderingGazeに対応するフレーム情報
+    varjo_Gaze gaze;
+    varjo_EyeMeasurements measurements;
+    std::optional<double> userIPD;
+    std::optional<double> hmdIPD;
+    std::string ipdAdjustmentMode;
+    std::optional<varjo_Gaze> renderingGaze;
+    VarjoProjectedGazePosition gazePos_toVideo;
+    std::optional<VarjoProjectedGazePosition> renderingGazePos_toVideo;
+    VarjoProjectedGazePosition gazePos_toVarjoDisplay;
+    std::optional<VarjoProjectedGazePosition> renderingGazePos_toVarjoDisplay;
+    FrameInfo frameInfo;
+    std::optional<FrameInfo> renderingGazeFrameInfo;
 };
 
 class VarjoEyeTrackingProvider {
 public:
-    // Gaze output filter type
     enum class OutputFilterType {
-        // Output filter is disabled
         NONE,
-
-        // Standard smoothing output filter
         STANDARD
     };
 
-    // Gaze output update frequency
     enum class OutputFrequency {
-        // Maximum frequency supported by currently connected device
         MAXIMUM,
-        // 100Hz frequency (supported by all devices)
         _100HZ,
-        // 200Hz frequency (supported by VR-3, XR-3, XR-4 and Aero devices)
         _200HZ
     };
 
-    // Gaze tracking status
     enum class Status {
-        // Application is not allowed to access gaze data (privacy setting in VarjoBase)
         NOT_AVAILABLE,
-
-        // Headset is not connected
         NOT_CONNECTED,
-
-        // Gaze tracking is not calibrated
         NOT_CALIBRATED,
-
-        // Gaze tracking is being calibrated
         CALIBRATING,
-
-        // Gaze tracking is calibrated and can provide data for application
         CALIBRATED
     };
 
-    VarjoEyeTrackingProvider(const std::shared_ptr<varjo_Session>& session);
-
+    explicit VarjoEyeTrackingProvider(const std::shared_ptr<varjo_Session>& session);
     ~VarjoEyeTrackingProvider();
 
     void initialize(OutputFilterType outputFilterType, OutputFrequency outputFrequency);
-
     void shutdown();
 
+    // Supplies frame timing and view matrices captured by the single external
+    // rendering synchronization owner. This class never calls varjo_WaitSync.
+    bool submitFrameInfo(const VarjoFrameInfoSnapshot& snapshot);
+
     Status getStatus() const;
-
     std::vector<std::pair<varjo_Gaze, varjo_EyeMeasurements>> getGazeDataWithEyeMeasurements() const;
-
     std::optional<double> getUserIPD() const;
-
     std::optional<double> getHMDIPD() const;
-
     std::string getIPDAdjustmentMode() const;
-
     std::optional<varjo_Gaze> getRenderingGaze() const;
-
     std::vector<VarjoEyeTrackingData> getEyeTrackingData();
+
+    uint64_t submittedFrameInfoCount() const noexcept;
+    uint64_t droppedFrameInfoCount() const noexcept;
 
 private:
     VarjoProjectedGazePosition calcProjectedGazePositionToVarjoDisplay(
         const varjo_Gaze& gaze,
         const std::vector<varjo_ViewInfo>& viewInfo) const;
-
     varjo_Vector2Df calcProjectedGazePositionToVarjoDisplayOneRay(
         const varjo_Ray& gazeRay,
         double focusDistance,
         const std::vector<varjo_ViewInfo>& viewInfo,
         size_t targetViewIndex) const;
-
     VarjoProjectedGazePosition calcProjectedGazePositionToVideo(
         const varjo_Gaze& gaze,
-        const std::vector<varjo_ViewInfo>& viewInfo
-    ) const;
-
-    FrameInfo requestFrameInfo();
-
-    void getFrameInfoWorkerFunction();
+        const std::vector<varjo_ViewInfo>& viewInfo) const;
 
 private:
     const std::shared_ptr<varjo_Session> session_;
@@ -136,34 +110,26 @@ private:
 
     std::deque<FrameInfo> frameInfos_;
     const size_t frameInfoCapacity_ = 512;
-    std::mutex frameInfoMtx_;
-    std::thread getFrameInfoWorker_;
-    std::atomic_bool workerStopSignal_{false};
+    mutable std::mutex frameInfoMtx_;
+    uint64_t submittedFrameInfoCount_ = 0;
+    uint64_t droppedFrameInfoCount_ = 0;
 };
 
 class VarjoEyeTrackingDataLogger {
 public:
     VarjoEyeTrackingDataLogger(const std::string& filepath, std::shared_ptr<varjo_Session> session);
-
     ~VarjoEyeTrackingDataLogger();
 
     bool open();
-
     void close();
-
     void write(const VarjoEyeTrackingData& data);
 
 private:
     std::string getHeaderCsvString();
-
     std::string varjoEyeTrackingDataToCsvString(const VarjoEyeTrackingData& data);
-
     std::string varjoGazeToCsvString(const varjo_Gaze& gaze);
-
     std::string varjoEyeMeasurementsToCsvString(const varjo_EyeMeasurements& measurements);
-
     std::string varjoProjectedGazePositionToCsvString(const VarjoProjectedGazePosition& gazePos);
-
     std::string frameInfoToCsvString(const FrameInfo& frameInfo);
 
 private:
@@ -177,39 +143,34 @@ class VarjoEyeTrackingService {
 public:
     VarjoEyeTrackingService(
         const std::shared_ptr<varjo_Session>& session,
-        const VarjoEyeTrackingProvider::OutputFilterType outputFilterType,
-        const VarjoEyeTrackingProvider::OutputFrequency outputFrequency,
+        VarjoEyeTrackingProvider::OutputFilterType outputFilterType,
+        VarjoEyeTrackingProvider::OutputFrequency outputFrequency,
         const std::string& filepath,
-        const size_t queueSize = 1000,
-        const int acquireFrequencyMs = 5
-    );
+        size_t queueSize = 1000,
+        int acquireFrequencyMs = 5);
 
     bool start();
-
     void stop();
+
+    // Call once per externally synchronized rendering frame.
+    bool submitFrameInfo(const VarjoFrameInfoSnapshot& snapshot);
 
     std::deque<VarjoEyeTrackingData> requestData();
 
-    // Counts samples that completed gaze acquisition, conversion, logger write,
-    // and insertion into the application queue during the current run.
-    uint64_t receivedSampleCount() const noexcept
-    {
-        return dataQueue_.receivedCount();
-    }
-
+    uint64_t receivedSampleCount() const noexcept { return dataQueue_.receivedCount(); }
     uint64_t processedSampleCount() const noexcept { return receivedSampleCount(); }
     uint64_t writtenSampleCount() const noexcept { return receivedSampleCount(); }
+    uint64_t droppedSampleCount() const noexcept { return dataQueue_.droppedCount(); }
+    double getSamplesPerSecond() const { return dataQueue_.samplesPerSecond(); }
 
-    // Counts old samples removed only because the bounded application queue was full.
-    // requestData() does not increment this value.
-    uint64_t droppedSampleCount() const noexcept
+    uint64_t submittedFrameInfoCount() const noexcept
     {
-        return dataQueue_.droppedCount();
+        return eyeTracker_.submittedFrameInfoCount();
     }
 
-    double getSamplesPerSecond() const
+    uint64_t droppedFrameInfoCount() const noexcept
     {
-        return dataQueue_.samplesPerSecond();
+        return eyeTracker_.droppedFrameInfoCount();
     }
 
 private:
@@ -220,7 +181,6 @@ private:
     const VarjoEyeTrackingProvider::OutputFilterType outputFilterType_;
     const VarjoEyeTrackingProvider::OutputFrequency outputFrequency_;
     VarjoEyeTrackingProvider eyeTracker_;
-
     VarjoEyeTrackingDataLogger logger_;
 
     VarjoToolkit::RunCountingDeque<VarjoEyeTrackingData> dataQueue_;
