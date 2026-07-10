@@ -58,18 +58,6 @@ bool VarjoFrameInfo::valid() const
     return session_ != nullptr && frame_info_ != nullptr;
 }
 
-bool VarjoFrameInfo::waitSync()
-{
-    if (!valid()) {
-        VTK_SD_ERROR("waitSync called with invalid frame info session=" << session_ << " frame_info=" << frame_info_);
-        return false;
-    }
-
-    varjo_WaitSync(session_, frame_info_);
-    VTK_SD_TRACE("waitSync complete frameNumber=" << frame_info_->frameNumber << " displayTime=" << frame_info_->displayTime << " viewCount=" << viewCount());
-    return true;
-}
-
 varjo_Session* VarjoFrameInfo::session() const
 {
     return session_;
@@ -116,7 +104,8 @@ const varjo_ViewInfo* VarjoFrameInfo::views() const
 const varjo_ViewInfo& VarjoFrameInfo::view(int32_t index) const
 {
     if (!valid() || index < 0 || index >= viewCount()) {
-        VTK_SD_ERROR("view index out of range index=" << index << " viewCount=" << (valid() ? viewCount() : 0));
+        VTK_SD_ERROR("view index out of range index=" << index
+            << " viewCount=" << (valid() ? viewCount() : 0));
         throw std::out_of_range("VarjoFrameInfo::view index out of range");
     }
     return frame_info_->views[index];
@@ -154,8 +143,13 @@ VarjoFrameInfoSnapshot VarjoFrameInfo::snapshot() const
     }
     out.displayTime = frame_info_->displayTime;
     out.frameNumber = frame_info_->frameNumber;
+    out.centerPose = varjo_FrameGetPose(session_, varjo_PoseType_Center);
+    out.centerPoseValid = true;
     out.valid = true;
-    VTK_SD_TRACE("snapshot frameNumber=" << out.frameNumber << " displayTime=" << out.displayTime << " views=" << out.views.size());
+
+    VTK_SD_TRACE("snapshot frameNumber=" << out.frameNumber
+        << " displayTime=" << out.displayTime
+        << " views=" << out.views.size());
     return out;
 }
 
