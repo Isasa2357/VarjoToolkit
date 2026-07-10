@@ -17,6 +17,9 @@
 
 #include <Varjo.h>
 
+#include <VarjoToolkit/Utilities/VarjoRunCountingDeque.hpp>
+#include <VarjoToolkit/Utilities/VarjoRunResetSignal.hpp>
+
 struct VarjoProjectedGazePosition {
     varjo_Vector2Df leftEye;
     varjo_Vector2Df rightEye;
@@ -30,8 +33,6 @@ struct FrameInfo {
     int64_t frameNumber;
 };
 
-
-
 struct VarjoEyeTrackingData {
     varjo_Gaze gaze;                                                                // 通常GazeのRayやステータス
     varjo_EyeMeasurements measurements;                                             // ユーザの眼の瞳孔や光彩の計測
@@ -42,13 +43,12 @@ struct VarjoEyeTrackingData {
     VarjoProjectedGazePosition gazePos_toVideo;                                     // 通常Gazeから計算した2D動画向けの視線位置
     std::optional<VarjoProjectedGazePosition> renderingGazePos_toVideo;             // renderingGazeから計算した2D動画向けの視線位置
     VarjoProjectedGazePosition gazePos_toVarjoDisplay;                              // 通常Gazeから計算したVarjoディスプレイ向けの視線位置
- 	std::optional<VarjoProjectedGazePosition> renderingGazePos_toVarjoDisplay;      // renderingGazeから計算したVarjoディスプレイ向けの視線位置
+    std::optional<VarjoProjectedGazePosition> renderingGazePos_toVarjoDisplay;      // renderingGazeから計算したVarjoディスプレイ向けの視線位置
     FrameInfo frameInfo;                                                            // 視線を取得した時のフレーム情報
     std::optional<FrameInfo> renderingGazeFrameInfo;                                // renderingGazeに対応するフレーム情報
 };
 
 class VarjoEyeTrackingProvider {
-
 public:
     // Gaze output filter type
     enum class OutputFilterType {
@@ -107,11 +107,11 @@ public:
 
     std::optional<varjo_Gaze> getRenderingGaze() const;
 
- 	std::vector<VarjoEyeTrackingData> getEyeTrackingData();
+    std::vector<VarjoEyeTrackingData> getEyeTrackingData();
 
 private:
     VarjoProjectedGazePosition calcProjectedGazePositionToVarjoDisplay(
-        const varjo_Gaze& gaze, 
+        const varjo_Gaze& gaze,
         const std::vector<varjo_ViewInfo>& viewInfo) const;
 
     varjo_Vector2Df calcProjectedGazePositionToVarjoDisplayOneRay(
@@ -141,7 +141,6 @@ private:
 };
 
 class VarjoEyeTrackingDataLogger {
-
 public:
     VarjoEyeTrackingDataLogger(const std::string& filepath, std::shared_ptr<varjo_Session> session);
 
@@ -154,7 +153,6 @@ public:
     void write(const VarjoEyeTrackingData& data);
 
 private:
-
     std::string getHeaderCsvString();
 
     std::string varjoEyeTrackingDataToCsvString(const VarjoEyeTrackingData& data);
@@ -175,7 +173,6 @@ private:
 };
 
 class VarjoEyeTrackingService {
-
 public:
     VarjoEyeTrackingService(
         const std::shared_ptr<varjo_Session>& session,
@@ -190,40 +187,22 @@ public:
 
     void stop();
 
-
     std::deque<VarjoEyeTrackingData> requestData();
 
-    // Returns the number of gaze samples currently present in the queue whose
-    // capture timestamps fall within the latest one-second interval.
-    // The default queue size (1000) is sufficient for the supported 100/200 Hz modes.
-    double getSamplesPerSecond()
+    uint64_t receivedSampleCount() const noexcept
     {
-        std::lock_guard<std::mutex> lock(this->dataQueueMutex_);
-        if (this->dataQueue_.empty()) {
-            return 0.0;
-        }
+        return dataQueue_.receivedCount();
+    }
 
-        constexpr varjo_Nanoseconds oneSecond = 1'000'000'000;
-        const varjo_Nanoseconds newest = this->dataQueue_.back().gaze.captureTime;
-        const varjo_Nanoseconds cutoff = newest > oneSecond ? newest - oneSecond : 0;
-
-        uint64_t samples = 0;
-        for (auto it = this->dataQueue_.rbegin(); it != this->dataQueue_.rend(); ++it) {
-            if (it->gaze.captureTime < cutoff) {
-                break;
-            }
-            ++samples;
-        }
-        return static_cast<double>(samples);
+    double getSamplesPerSecond() const
+    {
+        return dataQueue_.samplesPerSecond();
     }
 
 private:
-
     void dataRequestWorker();
 
-
 private:
-
     const std::shared_ptr<varjo_Session> session_;
     const VarjoEyeTrackingProvider::OutputFilterType outputFilterType_;
     const VarjoEyeTrackingProvider::OutputFrequency outputFrequency_;
@@ -231,12 +210,11 @@ private:
 
     VarjoEyeTrackingDataLogger logger_;
 
-
-    std::deque<VarjoEyeTrackingData> dataQueue_;
+    VarjoToolkit::RunCountingDeque<VarjoEyeTrackingData> dataQueue_;
     const size_t dataQueueMaxSize_;
     std::mutex dataQueueMutex_;
 
     std::thread dataRequestThread_;
     const int acquireFrequencyMs_;
-    std::atomic_bool threadEndSignal_{false};
+    VarjoToolkit::RunResetSignal threadEndSignal_{false, &dataQueue_};
 };
