@@ -2,6 +2,8 @@
 
 VarjoToolkit provides dedicated hardware performance tests for the camera and sensor services. These tests are separate from the short smoke/restart tests and are selected with the CTest label `benchmark`.
 
+The public counter and rate semantics are documented in [`HMD_SERVICE_METRICS.md`](HMD_SERVICE_METRICS.md).
+
 ## Covered services
 
 - VST distorted-color camera, left and right
