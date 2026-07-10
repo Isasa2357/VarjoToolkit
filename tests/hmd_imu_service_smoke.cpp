@@ -1,3 +1,4 @@
+#include "hmd_external_frame_sync.hpp"
 #include "hmd_service_test_common.hpp"
 
 #include <VarjoToolkit/Services/IMU/VarjoIMUService.hpp>
@@ -9,7 +10,8 @@ void runImuServiceSmokeTest()
     VarjoSession session;
     VTK_HMD_TEST_REQUIRE(session.valid());
 
-    const auto outputDirectory = vtk_hmd_service_test::makeOutputDirectory("imu");
+    const auto outputDirectory =
+        vtk_hmd_service_test::makeOutputDirectory("imu");
     const auto csvPath = outputDirectory / "imu_smoke.csv";
     VarjoIMUService service(session.shared(), csvPath.wstring(), 180);
 
@@ -17,41 +19,56 @@ void runImuServiceSmokeTest()
     std::cout << "IMU restart cycles=" << cycles << '\n';
 
     for (int cycle = 0; cycle < cycles; ++cycle) {
-        if (!service.start(false)) {
+        if (!service.start()) {
             throw std::runtime_error(
-                "VarjoIMUService::start failed at cycle " + std::to_string(cycle) + ": "
-                + vtk_hmd_service_test::wideToUtf8(service.lastError()));
+                "VarjoIMUService::start failed at cycle " +
+                std::to_string(cycle) + ": " +
+                vtk_hmd_service_test::wideToUtf8(service.lastError()));
         }
 
         vtk_hmd_service_test::StopGuard<VarjoIMUService> stopGuard(service);
+        vtk_hmd_test::ExternalFrameInfoPump framePump(
+            session,
+            [&service](const VarjoFrameInfoSnapshot& snapshot) {
+                static_cast<void>(service.submitFrameInfo(snapshot));
+            });
+        VTK_HMD_TEST_REQUIRE(framePump.start());
         VTK_HMD_TEST_REQUIRE(service.getSamplesPerSecond() == 0.0);
 
-        const double sampleRate = vtk_hmd_service_test::waitForPositiveRate(
-            "IMU/head pose",
-            [&]() { return service.getSamplesPerSecond(); },
-            [&]() { return service.receivedSampleCount(); });
+        const double sampleRate =
+            vtk_hmd_service_test::waitForPositiveRate(
+                "IMU/head pose",
+                [&]() { return service.getSamplesPerSecond(); },
+                [&]() { return service.receivedSampleCount(); });
 
         const auto latest = service.latestData();
         const auto buffered = service.requestBufferedData();
 
+        framePump.stop();
         stopGuard.stop();
 
         std::cout
             << "IMU cycle=" << cycle
             << " received=" << service.receivedSampleCount()
+            << " processed=" << service.processedSampleCount()
             << " written=" << service.writtenSampleCount()
+            << " dropped=" << service.droppedSampleCount()
             << " samplesPerSecond=" << sampleRate
             << " bufferSize=" << service.bufferSize()
             << " frameNumber=" << latest.frame_number
             << '\n';
 
         VTK_HMD_TEST_REQUIRE(service.receivedSampleCount() > 0);
-        VTK_HMD_TEST_REQUIRE(service.receivedSampleCount() == service.writtenSampleCount());
+        VTK_HMD_TEST_REQUIRE(
+            service.processedSampleCount() == service.receivedSampleCount());
+        VTK_HMD_TEST_REQUIRE(
+            service.writtenSampleCount() == service.processedSampleCount());
         VTK_HMD_TEST_REQUIRE(sampleRate > 0.0);
         VTK_HMD_TEST_REQUIRE(service.bufferSize() > 0);
         VTK_HMD_TEST_REQUIRE(!buffered.empty());
         VTK_HMD_TEST_REQUIRE(latest.valid);
         VTK_HMD_TEST_REQUIRE(latest.frame_info.valid);
+        VTK_HMD_TEST_REQUIRE(latest.frame_info.centerPoseValid);
         VTK_HMD_TEST_REQUIRE(latest.frame_number >= 0);
         VTK_HMD_TEST_REQUIRE(latest.frame_display_time > 0);
     }
@@ -63,5 +80,7 @@ void runImuServiceSmokeTest()
 
 int main()
 {
-    return vtk_hmd_service_test::runServiceTest("VarjoToolkitHmdImuServiceSmokeTest", runImuServiceSmokeTest);
+    return vtk_hmd_service_test::runServiceTest(
+        "VarjoToolkitHmdImuServiceSmokeTest",
+        runImuServiceSmokeTest);
 }
