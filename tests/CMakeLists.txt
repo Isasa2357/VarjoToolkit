@@ -31,6 +31,10 @@ function(varjotoolkit_add_hmd_test target)
     endif()
 
     add_test(NAME ${target} COMMAND ${target})
+    set_tests_properties(${target}
+        PROPERTIES
+            RESOURCE_LOCK varjo_hmd
+    )
 endfunction()
 
 function(varjotoolkit_configure_service_test target labels)
