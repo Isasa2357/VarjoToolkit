@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Varjo.h>
+#include <Varjo_math.h>
 
 #include <cstdint>
 #include <memory>
