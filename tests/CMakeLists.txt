@@ -46,6 +46,15 @@ function(varjotoolkit_configure_service_test target labels)
     )
 endfunction()
 
+function(varjotoolkit_configure_performance_test target labels)
+    set_tests_properties(${target}
+        PROPERTIES
+            LABELS "${labels};performance;benchmark"
+            SKIP_RETURN_CODE 125
+            TIMEOUT 180
+    )
+endfunction()
+
 if (VARJOTOOLKIT_BUILD_TESTS)
     add_executable(VarjoToolkitSampleRateUtilitiesTest
         sample_rate_utilities_test.cpp
@@ -154,5 +163,45 @@ if (VARJOTOOLKIT_BUILD_HMD_TESTS)
     varjotoolkit_configure_service_test(
         VarjoToolkitHmdEyeTrackingServiceSmokeTest
         "hmd;service;sensor;gaze;performance;optional"
+    )
+
+    varjotoolkit_add_hmd_test(VarjoToolkitHmdVstServicePerformanceTest
+        hmd_vst_service_performance.cpp
+    )
+    varjotoolkit_configure_performance_test(
+        VarjoToolkitHmdVstServicePerformanceTest
+        "hmd;service;camera;vst"
+    )
+
+    varjotoolkit_add_hmd_test(VarjoToolkitHmdEyeCameraServicePerformanceTest
+        hmd_eye_camera_service_performance.cpp
+    )
+    varjotoolkit_configure_performance_test(
+        VarjoToolkitHmdEyeCameraServicePerformanceTest
+        "hmd;service;camera;eyecamera;optional"
+    )
+
+    varjotoolkit_add_hmd_test(VarjoToolkitHmdCubemapServicePerformanceTest
+        hmd_cubemap_service_performance.cpp
+    )
+    varjotoolkit_configure_performance_test(
+        VarjoToolkitHmdCubemapServicePerformanceTest
+        "hmd;service;camera;cubemap;optional"
+    )
+
+    varjotoolkit_add_hmd_test(VarjoToolkitHmdImuServicePerformanceTest
+        hmd_imu_service_performance.cpp
+    )
+    varjotoolkit_configure_performance_test(
+        VarjoToolkitHmdImuServicePerformanceTest
+        "hmd;service;sensor;imu"
+    )
+
+    varjotoolkit_add_hmd_test(VarjoToolkitHmdEyeTrackingServicePerformanceTest
+        hmd_eye_tracking_service_performance.cpp
+    )
+    varjotoolkit_configure_performance_test(
+        VarjoToolkitHmdEyeTrackingServicePerformanceTest
+        "hmd;service;sensor;gaze;optional"
     )
 endif()
