@@ -3,7 +3,6 @@
 #include <Varjo.h>
 #include <Varjo_math.h>
 
-#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <deque>
@@ -15,6 +14,7 @@
 #include <thread>
 
 #include <VarjoToolkit/Core/VarjoFrameInfo.hpp>
+#include <VarjoToolkit/Utilities/VarjoRunResetSignal.hpp>
 #include <VarjoToolkit/Utilities/VarjoSampleRateCounter.hpp>
 
 // Service-style IMU/head-pose logger.
@@ -63,9 +63,14 @@ public:
     std::wstring outputPath() const;
     std::wstring lastError() const;
 
+    // IMU sampling and CSV writing are performed synchronously by the worker,
+    // so the received and written counts are identical for successful samples.
+    uint64_t receivedSampleCount() const { return rowCount(); }
+    uint64_t writtenSampleCount() const { return rowCount(); }
+
     double getSamplesPerSecond() const
     {
-        return sample_rate_counter_.update(rowCount());
+        return sample_rate_counter_.update(receivedSampleCount());
     }
 
     VarjoIMUData latestData() const;
@@ -96,12 +101,11 @@ private:
     mutable std::mutex log_mutex_;
 
     std::thread worker_;
-    std::atomic_bool stop_requested_{ true };
+    mutable VarjoToolkit::SampleRateCounter sample_rate_counter_;
+    VarjoToolkit::RunResetSignal stop_requested_{true, &sample_rate_counter_};
 
     mutable std::mutex state_mutex_;
     bool running_ = false;
     uint64_t row_count_ = 0;
     std::wstring last_error_;
-
-    mutable VarjoToolkit::SampleRateCounter sample_rate_counter_;
 };
