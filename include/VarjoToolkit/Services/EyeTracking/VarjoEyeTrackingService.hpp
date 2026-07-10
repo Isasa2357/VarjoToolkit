@@ -9,6 +9,7 @@
 #include <iterator>
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
 #include <utility>
 #include <filesystem>
 #include <fstream>
@@ -189,10 +190,15 @@ public:
 
     std::deque<VarjoEyeTrackingData> requestData();
 
+    // Counts samples that completed gaze acquisition, conversion, logger write,
+    // and insertion into the application queue during the current run.
     uint64_t receivedSampleCount() const noexcept
     {
         return dataQueue_.receivedCount();
     }
+
+    uint64_t processedSampleCount() const noexcept { return receivedSampleCount(); }
+    uint64_t writtenSampleCount() const noexcept { return receivedSampleCount(); }
 
     double getSamplesPerSecond() const
     {
