@@ -63,6 +63,8 @@ public:
         return processed >= failures ? processed - failures : 0;
     }
 
+    uint64_t writtenFrameCount() const { return successfulWriteCount(); }
+
     double getFramesPerSecond() const
     {
         return frame_queue_.pushedRatePerSecond();
