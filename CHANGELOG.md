@@ -2,15 +2,49 @@
 
 ## Unreleased
 
+## v0.4.0 - HMD service metrics and hardware test release - 2026-07-11
+
 ### Added
 
+- Lightweight per-run sample-rate metrics for camera and sensor services.
+  - VST and eye camera expose left/right received-frame counts and FPS.
+  - Environment cubemap exposes received-frame count and FPS.
+  - IMU/head pose and eye tracking expose received-sample counts and samples per second.
+- Explicit received / processed / written / dropped / write-failure statistics where supported.
+- Eye tracking application-queue drop statistics through `droppedSampleCount()`.
+- Restart-safe counter utilities.
+  - `VarjoDataStreamFrameQueue` now tracks total and per-channel receive counts and rates.
+  - `VarjoToolkit::SampleRateCounter`, `RunCountingDeque`, and `RunResetSignal` reset per-run state when a service is restarted.
+- HMD service smoke and restart tests for:
+  - VST distorted-color camera
+  - eye camera
+  - environment cubemap
+  - IMU/head pose
+  - eye tracking
+- Configurable restart-cycle testing through `VARJOTOOLKIT_HMD_RESTART_CYCLES`.
 - Dedicated HMD service performance benchmark suite selected with the CTest label `benchmark`.
-  - Measures VST, eye camera, environment cubemap, IMU/head pose, and eye tracking.
   - Uses a 1-second warmup and 10-second measurement by default.
   - Reports one-second interval rates, min/average/max, cumulative observed average, received/processed/written counts, queue drops, and write failures where supported.
   - Measurement duration can be configured with `VARJOTOOLKIT_HMD_PERFORMANCE_SECONDS` and `VARJOTOOLKIT_HMD_PERFORMANCE_WARMUP_SECONDS`.
-  - Added `docs/HMD_SERVICE_PERFORMANCE_TESTS.md`.
-- Eye tracking application-queue drop statistics through `droppedSampleCount()`.
+- HMD-independent tests for rate calculation, per-channel counting, queue overflow accounting, and restart resets.
+- Documentation:
+  - `docs/HMD_SERVICE_METRICS.md`
+  - `docs/HMD_SERVICE_PERFORMANCE_TESTS.md`
+
+### Changed
+
+- Camera and sensor FPS getters now consistently represent successfully received samples rather than writer-thread completion.
+- Eye tracking rate calculation no longer depends on the current application queue contents, so `requestData()` does not reset the measured rate.
+- HMD tests use the CTest resource lock `varjo_hmd` to prevent concurrent access to the same headset.
+- Optional eye camera, cubemap, and eye tracking tests return CTest `Skipped` when the connected hardware, runtime permission, or calibration does not provide the feature.
+- Service restart tests use a 120-second timeout and the `restart` label.
+- Bumped the project and public version header to `0.4.0`.
+
+### Verified
+
+- Core, rendering, D3D11 swapchain, and D3D12 swapchain HMD smoke tests passed in the developer hardware environment.
+- VST, eye camera, environment cubemap, IMU, and eye tracking service smoke/restart tests passed.
+- The five dedicated HMD service performance benchmarks passed.
 
 ## v0.3.0 - SuperDebug diagnostics release
 
