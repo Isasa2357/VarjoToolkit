@@ -1,3 +1,4 @@
+#include "hmd_external_frame_sync.hpp"
 #include "hmd_service_test_common.hpp"
 
 #include <VarjoToolkit/Services/EyeTracking/VarjoEyeTrackingService.hpp>
@@ -30,14 +31,17 @@ void runEyeTrackingServiceSmokeTest()
     {
         VarjoEyeTrackingProvider statusProvider(session.shared());
         const auto status = statusProvider.getStatus();
-        std::cout << "Gaze status before service start: " << gazeStatusName(status) << '\n';
+        std::cout << "Gaze status before service start: "
+                  << gazeStatusName(status) << '\n';
         if (status != VarjoEyeTrackingProvider::Status::CALIBRATED) {
             vtk_hmd_service_test::skipOrFail(
-                std::string("Eye tracking is not ready. Current status: ") + gazeStatusName(status));
+                std::string("Eye tracking is not ready. Current status: ") +
+                gazeStatusName(status));
         }
     }
 
-    const auto outputDirectory = vtk_hmd_service_test::makeOutputDirectory("eye_tracking");
+    const auto outputDirectory =
+        vtk_hmd_service_test::makeOutputDirectory("eye_tracking");
     const auto csvPath = outputDirectory / "eye_tracking_smoke.csv";
 
     VarjoEyeTrackingService service(
@@ -53,16 +57,25 @@ void runEyeTrackingServiceSmokeTest()
 
     for (int cycle = 0; cycle < cycles; ++cycle) {
         if (!service.start()) {
-            throw std::runtime_error("VarjoEyeTrackingService::start failed at cycle " + std::to_string(cycle));
+            throw std::runtime_error(
+                "VarjoEyeTrackingService::start failed at cycle " +
+                std::to_string(cycle));
         }
 
         vtk_hmd_service_test::StopGuard<VarjoEyeTrackingService> stopGuard(service);
+        vtk_hmd_test::ExternalFrameInfoPump framePump(
+            session,
+            [&service](const VarjoFrameInfoSnapshot& snapshot) {
+                static_cast<void>(service.submitFrameInfo(snapshot));
+            });
+        VTK_HMD_TEST_REQUIRE(framePump.start());
         VTK_HMD_TEST_REQUIRE(service.getSamplesPerSecond() == 0.0);
 
-        const double sampleRate = vtk_hmd_service_test::waitForPositiveRate(
-            "Eye tracking",
-            [&]() { return service.getSamplesPerSecond(); },
-            [&]() { return service.receivedSampleCount(); });
+        const double sampleRate =
+            vtk_hmd_service_test::waitForPositiveRate(
+                "Eye tracking",
+                [&]() { return service.getSamplesPerSecond(); },
+                [&]() { return service.receivedSampleCount(); });
 
         const uint64_t receivedBeforeRequest = service.receivedSampleCount();
         auto samples = service.requestData();
@@ -74,11 +87,14 @@ void runEyeTrackingServiceSmokeTest()
             samples = service.requestData();
         }
 
+        framePump.stop();
         stopGuard.stop();
 
         std::cout
             << "Eye tracking cycle=" << cycle
             << " received=" << service.receivedSampleCount()
+            << " frameInfoSubmitted=" << service.submittedFrameInfoCount()
+            << " frameInfoDropped=" << service.droppedFrameInfoCount()
             << " samplesReturned=" << samples.size()
             << " samplesPerSecond=" << sampleRate
             << " rateAfterRequest=" << rateAfterRequest
@@ -86,7 +102,9 @@ void runEyeTrackingServiceSmokeTest()
 
         VTK_HMD_TEST_REQUIRE(receivedBeforeRequest > 0);
         VTK_HMD_TEST_REQUIRE(receivedAfterRequest >= receivedBeforeRequest);
-        VTK_HMD_TEST_REQUIRE(service.receivedSampleCount() >= receivedAfterRequest);
+        VTK_HMD_TEST_REQUIRE(
+            service.receivedSampleCount() >= receivedAfterRequest);
+        VTK_HMD_TEST_REQUIRE(service.submittedFrameInfoCount() > 0);
         VTK_HMD_TEST_REQUIRE(sampleRate > 0.0);
         VTK_HMD_TEST_REQUIRE(rateAfterRequest > 0.0);
         VTK_HMD_TEST_REQUIRE(!samples.empty());
@@ -104,5 +122,7 @@ void runEyeTrackingServiceSmokeTest()
 
 int main()
 {
-    return vtk_hmd_service_test::runServiceTest("VarjoToolkitHmdEyeTrackingServiceSmokeTest", runEyeTrackingServiceSmokeTest);
+    return vtk_hmd_service_test::runServiceTest(
+        "VarjoToolkitHmdEyeTrackingServiceSmokeTest",
+        runEyeTrackingServiceSmokeTest);
 }
