@@ -3,7 +3,9 @@
 #include <Varjo.h>
 #include <Varjo_math.h>
 
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <deque>
 #include <filesystem>
@@ -14,13 +16,13 @@
 #include <thread>
 
 #include <VarjoToolkit/Core/VarjoFrameInfo.hpp>
-#include <VarjoToolkit/Utilities/VarjoRunResetSignal.hpp>
 #include <VarjoToolkit/Utilities/VarjoSampleRateCounter.hpp>
 
-// Service-style IMU/head-pose logger.
+// External-frame-driven head-pose logger.
 //
-// This service samples Varjo frame/head-pose data, keeps a bounded in-memory
-// buffer, and writes each sample to CSV.
+// VarjoIMUService never calls varjo_WaitSync. The rendering owner submits one
+// VarjoFrameInfoSnapshot per synchronized frame. Pose processing and CSV output
+// are performed on the service worker thread.
 class VarjoIMUService {
 public:
     struct VarjoIMUData {
@@ -37,25 +39,27 @@ public:
         varjo_Matrix pose{};
         varjo_Vector3D position{};
         varjo_Vector3D euler_deg{};
-        varjo_Vector3D angular_velocity{}; // deg/s, computed from euler_deg delta
+        varjo_Vector3D angular_velocity{};
         VarjoFrameInfoSnapshot frame_info{};
 
         bool valid = false;
     };
 
-public:
     VarjoIMUService(
         const std::shared_ptr<varjo_Session>& session,
         const std::wstring& csv_output_path,
         size_t buffer_capacity = 90);
-
     ~VarjoIMUService();
 
     VarjoIMUService(const VarjoIMUService&) = delete;
     VarjoIMUService& operator=(const VarjoIMUService&) = delete;
 
-    bool start(bool waitFillBuffer = false);
+    bool start();
     void stop();
+
+    // Call once for each frame synchronized by the renderer. Returns false when
+    // the service is stopped or the snapshot is invalid.
+    bool submitFrameInfo(const VarjoFrameInfoSnapshot& snapshot);
 
     size_t bufferCapacity() const { return buffer_capacity_; }
     size_t bufferSize() const;
@@ -63,10 +67,25 @@ public:
     std::wstring outputPath() const;
     std::wstring lastError() const;
 
-    // IMU sampling and CSV writing are performed synchronously by the worker,
-    // so the received and written counts are identical for successful samples.
-    uint64_t receivedSampleCount() const { return rowCount(); }
-    uint64_t writtenSampleCount() const { return rowCount(); }
+    uint64_t receivedSampleCount() const noexcept
+    {
+        return received_count_.load();
+    }
+
+    uint64_t processedSampleCount() const noexcept
+    {
+        return processed_count_.load();
+    }
+
+    uint64_t writtenSampleCount() const noexcept
+    {
+        return written_count_.load();
+    }
+
+    uint64_t droppedSampleCount() const noexcept
+    {
+        return dropped_count_.load();
+    }
 
     double getSamplesPerSecond() const
     {
@@ -77,14 +96,21 @@ public:
     std::deque<VarjoIMUData> requestBufferedData() const;
 
 private:
+    struct PendingFrame {
+        VarjoFrameInfoSnapshot snapshot;
+        std::chrono::system_clock::time_point system_time{};
+        int64_t system_unix_us = 0;
+        varjo_Nanoseconds varjo_now = 0;
+        int64_t varjo_now_unix_us = 0;
+    };
+
     void workerMain();
+    VarjoIMUData makeData(const PendingFrame& pending);
 
     bool openLogFile();
     void closeLogFile();
     void writeHeader();
-    void writeRow(const VarjoIMUData& data);
-
-    VarjoIMUData sampleOnce();
+    bool writeRow(const VarjoIMUData& data, uint64_t row_index);
 
 private:
     static constexpr size_t min_buffer_capacity_ = 1;
@@ -93,6 +119,12 @@ private:
     std::filesystem::path csv_output_path_;
 
     const size_t buffer_capacity_;
+    const size_t pending_capacity_;
+
+    std::deque<PendingFrame> pending_frames_;
+    mutable std::mutex pending_mutex_;
+    std::condition_variable pending_cv_;
+
     std::deque<VarjoIMUData> imu_buffer_;
     VarjoIMUData previous_data_{};
     mutable std::mutex imu_buffer_mutex_;
@@ -101,11 +133,15 @@ private:
     mutable std::mutex log_mutex_;
 
     std::thread worker_;
+    std::atomic_bool stop_requested_{true};
     mutable VarjoToolkit::SampleRateCounter sample_rate_counter_;
-    VarjoToolkit::RunResetSignal stop_requested_{true, &sample_rate_counter_};
 
     mutable std::mutex state_mutex_;
     bool running_ = false;
-    uint64_t row_count_ = 0;
     std::wstring last_error_;
+
+    std::atomic<uint64_t> received_count_{0};
+    std::atomic<uint64_t> processed_count_{0};
+    std::atomic<uint64_t> written_count_{0};
+    std::atomic<uint64_t> dropped_count_{0};
 };
