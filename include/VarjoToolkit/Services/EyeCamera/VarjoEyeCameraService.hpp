@@ -16,6 +16,7 @@
 
 #include <VarjoToolkit/DataStream/VarjoDataStream.hpp>
 #include <VarjoToolkit/DataStream/VarjoDataStreamFrameQueue.hpp>
+#include <VarjoToolkit/Utilities/VarjoSampleRateCounter.hpp>
 
 class VarjoEyeCameraService {
 public:
@@ -49,6 +50,16 @@ public:
     uint64_t rightFrameCount() const;
     uint64_t droppedFrameCount() const;
     uint64_t writeFailureCount() const;
+
+    double getLeftFramesPerSecond() const
+    {
+        return left_rate_counter_.update(leftFrameCount());
+    }
+
+    double getRightFramesPerSecond() const
+    {
+        return right_rate_counter_.update(rightFrameCount());
+    }
 
 private:
     struct CapturedFrame {
@@ -113,4 +124,7 @@ private:
     uint64_t right_frame_count_ = 0;
     uint64_t dropped_frame_count_ = 0;
     uint64_t write_failure_count_ = 0;
+
+    mutable VarjoToolkit::SampleRateCounter left_rate_counter_;
+    mutable VarjoToolkit::SampleRateCounter right_rate_counter_;
 };
