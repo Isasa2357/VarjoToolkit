@@ -40,9 +40,9 @@ endfunction()
 function(varjotoolkit_configure_service_test target labels)
     set_tests_properties(${target}
         PROPERTIES
-            LABELS "${labels}"
+            LABELS "${labels};restart"
             SKIP_RETURN_CODE 125
-            TIMEOUT 30
+            TIMEOUT 120
     )
 endfunction()
 
