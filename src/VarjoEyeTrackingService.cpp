@@ -1,24 +1,14 @@
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-
 #include <VarjoToolkit/Services/EyeTracking/VarjoEyeTrackingService.hpp>
 
-#include <VarjoToolkit/Core/VarjoFrameInfo.hpp>
 #include <VarjoToolkit/Diagnostics/VarjoDiagnostics.hpp>
 #include <VarjoToolkit/Utilities/VarjoCsv.hpp>
-
-#include <Windows.h>
 
 #include <algorithm>
 #include <array>
 #include <chrono>
 #include <cmath>
-#include <ctime>
-#include <iomanip>
 #include <limits>
 #include <optional>
-#include <sstream>
 #include <utility>
 
 namespace {
@@ -44,81 +34,85 @@ bool shouldLogCounter(uint64_t value)
 const char* outputFilterTypeName(VarjoEyeTrackingProvider::OutputFilterType value)
 {
     switch (value) {
-    case VarjoEyeTrackingProvider::OutputFilterType::NONE:
-        return "NONE";
-    case VarjoEyeTrackingProvider::OutputFilterType::STANDARD:
-        return "STANDARD";
-    default:
-        return "UNKNOWN";
+    case VarjoEyeTrackingProvider::OutputFilterType::NONE: return "NONE";
+    case VarjoEyeTrackingProvider::OutputFilterType::STANDARD: return "STANDARD";
+    default: return "UNKNOWN";
     }
 }
 
 const char* outputFrequencyName(VarjoEyeTrackingProvider::OutputFrequency value)
 {
     switch (value) {
-    case VarjoEyeTrackingProvider::OutputFrequency::MAXIMUM:
-        return "MAXIMUM";
-    case VarjoEyeTrackingProvider::OutputFrequency::_100HZ:
-        return "100HZ";
-    case VarjoEyeTrackingProvider::OutputFrequency::_200HZ:
-        return "200HZ";
-    default:
-        return "UNKNOWN";
+    case VarjoEyeTrackingProvider::OutputFrequency::MAXIMUM: return "MAXIMUM";
+    case VarjoEyeTrackingProvider::OutputFrequency::_100HZ: return "100HZ";
+    case VarjoEyeTrackingProvider::OutputFrequency::_200HZ: return "200HZ";
+    default: return "UNKNOWN";
     }
 }
 
 const char* gazeStatusName(VarjoEyeTrackingProvider::Status value)
 {
     switch (value) {
-    case VarjoEyeTrackingProvider::Status::NOT_AVAILABLE:
-        return "NOT_AVAILABLE";
-    case VarjoEyeTrackingProvider::Status::NOT_CONNECTED:
-        return "NOT_CONNECTED";
-    case VarjoEyeTrackingProvider::Status::NOT_CALIBRATED:
-        return "NOT_CALIBRATED";
-    case VarjoEyeTrackingProvider::Status::CALIBRATING:
-        return "CALIBRATING";
-    case VarjoEyeTrackingProvider::Status::CALIBRATED:
-        return "CALIBRATED";
-    default:
-        return "UNKNOWN";
+    case VarjoEyeTrackingProvider::Status::NOT_AVAILABLE: return "NOT_AVAILABLE";
+    case VarjoEyeTrackingProvider::Status::NOT_CONNECTED: return "NOT_CONNECTED";
+    case VarjoEyeTrackingProvider::Status::NOT_CALIBRATED: return "NOT_CALIBRATED";
+    case VarjoEyeTrackingProvider::Status::CALIBRATING: return "CALIBRATING";
+    case VarjoEyeTrackingProvider::Status::CALIBRATED: return "CALIBRATED";
+    default: return "UNKNOWN";
     }
 }
 
-Vec3 addVec3(const Vec3& a, const Vec3& b) { return Vec3{a.x + b.x, a.y + b.y, a.z + b.z}; }
-Vec3 mulVec3(const Vec3& v, double s) { return Vec3{v.x * s, v.y * s, v.z * s}; }
-double dotVec3(const Vec3& a, const Vec3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+Vec3 addVec3(const Vec3& a, const Vec3& b)
+{
+    return Vec3{a.x + b.x, a.y + b.y, a.z + b.z};
+}
+
+Vec3 mulVec3(const Vec3& value, double scalar)
+{
+    return Vec3{value.x * scalar, value.y * scalar, value.z * scalar};
+}
+
+double dotVec3(const Vec3& a, const Vec3& b)
+{
+    return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
 Vec3 crossVec3(const Vec3& a, const Vec3& b)
 {
     return Vec3{
         a.y * b.z - a.z * b.y,
         a.z * b.x - a.x * b.z,
-        a.x * b.y - a.y * b.x
-    };
+        a.x * b.y - a.y * b.x};
 }
 
-double lengthVec3(const Vec3& v) { return std::sqrt(dotVec3(v, v)); }
-
-Vec3 normalizeVec3(const Vec3& v, const Vec3& fallback)
+double lengthVec3(const Vec3& value)
 {
-    const double len = lengthVec3(v);
-    if (len <= 1.0e-9) {
-        return fallback;
-    }
-    return mulVec3(v, 1.0 / len);
+    return std::sqrt(dotVec3(value, value));
 }
 
-Vec3 toVec3(const varjo_Vector3D& v) { return Vec3{v.x, v.y, v.z}; }
-varjo_Vector3D toVarjoVector3D(const Vec3& v) { return varjo_Vector3D{v.x, v.y, v.z}; }
+Vec3 normalizeVec3(const Vec3& value, const Vec3& fallback)
+{
+    const double length = lengthVec3(value);
+    return length > 1.0e-9 ? mulVec3(value, 1.0 / length) : fallback;
+}
 
-Vec4 mulMat4Vec4(const double mat[16], const Vec4& v)
+Vec3 toVec3(const varjo_Vector3D& value)
+{
+    return Vec3{value.x, value.y, value.z};
+}
+
+varjo_Vector3D toVarjoVector3D(const Vec3& value)
+{
+    return varjo_Vector3D{value.x, value.y, value.z};
+}
+
+Vec4 mulMat4Vec4(const double matrix[16], const Vec4& value)
 {
     return Vec4{
-        mat[0] * v.x + mat[4] * v.y + mat[8] * v.z + mat[12] * v.w,
-        mat[1] * v.x + mat[5] * v.y + mat[9] * v.z + mat[13] * v.w,
-        mat[2] * v.x + mat[6] * v.y + mat[10] * v.z + mat[14] * v.w,
-        mat[3] * v.x + mat[7] * v.y + mat[11] * v.z + mat[15] * v.w
-    };
+        matrix[0] * value.x + matrix[4] * value.y + matrix[8] * value.z + matrix[12] * value.w,
+        matrix[1] * value.x + matrix[5] * value.y + matrix[9] * value.z + matrix[13] * value.w,
+        matrix[2] * value.x + matrix[6] * value.y + matrix[10] * value.z + matrix[14] * value.w,
+        matrix[3] * value.x + matrix[7] * value.y + matrix[11] * value.z + matrix[15] * value.w};
 }
 
 Vec3 viewMatrixEyeOriginWorld(const double view[16])
@@ -129,50 +123,54 @@ Vec3 viewMatrixEyeOriginWorld(const double view[16])
     return Vec3{
         -(view[0] * tx + view[1] * ty + view[2] * tz),
         -(view[4] * tx + view[5] * ty + view[6] * tz),
-        -(view[8] * tx + view[9] * ty + view[10] * tz)
-    };
+        -(view[8] * tx + view[9] * ty + view[10] * tz)};
 }
 
-Vec3 transformViewVectorToWorld(const double view[16], const Vec3& v)
+Vec3 transformViewVectorToWorld(const double view[16], const Vec3& value)
 {
     return Vec3{
-        view[0] * v.x + view[1] * v.y + view[2] * v.z,
-        view[4] * v.x + view[5] * v.y + view[6] * v.z,
-        view[8] * v.x + view[9] * v.y + view[10] * v.z
-    };
+        view[0] * value.x + view[1] * value.y + view[2] * value.z,
+        view[4] * value.x + view[5] * value.y + view[6] * value.z,
+        view[8] * value.x + view[9] * value.y + view[10] * value.z};
 }
 
 bool reconstructHeadBasisFromFrameInfoViews(
     const std::vector<varjo_ViewInfo>& views,
-    Vec3& center_world,
-    Vec3& right_world,
-    Vec3& up_world,
-    Vec3& forward_world,
-    Vec3& positive_z_world)
+    Vec3& centerWorld,
+    Vec3& rightWorld,
+    Vec3& upWorld,
+    Vec3& forwardWorld,
+    Vec3& positiveZWorld)
 {
-    if (views.size() < 2) {
-        return false;
-    }
+    if (views.size() < 2) return false;
 
-    const Vec3 leftEye = viewMatrixEyeOriginWorld(views[0].viewMatrix);
-    const Vec3 rightEye = viewMatrixEyeOriginWorld(views[1].viewMatrix);
-    center_world = mulVec3(addVec3(leftEye, rightEye), 0.5);
+    centerWorld = mulVec3(
+        addVec3(
+            viewMatrixEyeOriginWorld(views[0].viewMatrix),
+            viewMatrixEyeOriginWorld(views[1].viewMatrix)),
+        0.5);
 
-    right_world = normalizeVec3(addVec3(
-        transformViewVectorToWorld(views[0].viewMatrix, Vec3{1.0, 0.0, 0.0}),
-        transformViewVectorToWorld(views[1].viewMatrix, Vec3{1.0, 0.0, 0.0})), Vec3{1.0, 0.0, 0.0});
+    rightWorld = normalizeVec3(
+        addVec3(
+            transformViewVectorToWorld(views[0].viewMatrix, Vec3{1.0, 0.0, 0.0}),
+            transformViewVectorToWorld(views[1].viewMatrix, Vec3{1.0, 0.0, 0.0})),
+        Vec3{1.0, 0.0, 0.0});
+    upWorld = normalizeVec3(
+        addVec3(
+            transformViewVectorToWorld(views[0].viewMatrix, Vec3{0.0, 1.0, 0.0}),
+            transformViewVectorToWorld(views[1].viewMatrix, Vec3{0.0, 1.0, 0.0})),
+        Vec3{0.0, 1.0, 0.0});
+    forwardWorld = normalizeVec3(
+        addVec3(
+            transformViewVectorToWorld(views[0].viewMatrix, Vec3{0.0, 0.0, -1.0}),
+            transformViewVectorToWorld(views[1].viewMatrix, Vec3{0.0, 0.0, -1.0})),
+        Vec3{0.0, 0.0, -1.0});
 
-    up_world = normalizeVec3(addVec3(
-        transformViewVectorToWorld(views[0].viewMatrix, Vec3{0.0, 1.0, 0.0}),
-        transformViewVectorToWorld(views[1].viewMatrix, Vec3{0.0, 1.0, 0.0})), Vec3{0.0, 1.0, 0.0});
-
-    forward_world = normalizeVec3(addVec3(
-        transformViewVectorToWorld(views[0].viewMatrix, Vec3{0.0, 0.0, -1.0}),
-        transformViewVectorToWorld(views[1].viewMatrix, Vec3{0.0, 0.0, -1.0})), Vec3{0.0, 0.0, -1.0});
-
-    right_world = normalizeVec3(right_world, normalizeVec3(crossVec3(forward_world, up_world), Vec3{1.0, 0.0, 0.0}));
-    up_world = normalizeVec3(crossVec3(right_world, forward_world), up_world);
-    positive_z_world = normalizeVec3(mulVec3(forward_world, -1.0), Vec3{0.0, 0.0, 1.0});
+    rightWorld = normalizeVec3(
+        rightWorld,
+        normalizeVec3(crossVec3(forwardWorld, upWorld), Vec3{1.0, 0.0, 0.0}));
+    upWorld = normalizeVec3(crossVec3(rightWorld, forwardWorld), upWorld);
+    positiveZWorld = normalizeVec3(mulVec3(forwardWorld, -1.0), Vec3{0.0, 0.0, 1.0});
     return true;
 }
 
@@ -180,60 +178,72 @@ varjo_Vector3D transformHeadPointToWorldUsingFrameInfo(
     const std::vector<varjo_ViewInfo>& views,
     const varjo_Vector3D& pointHeadRH)
 {
-    Vec3 center{}, right{}, up{}, forward{}, positiveZ{};
-    if (!reconstructHeadBasisFromFrameInfoViews(views, center, right, up, forward, positiveZ)) {
+    Vec3 center{};
+    Vec3 right{};
+    Vec3 up{};
+    Vec3 forward{};
+    Vec3 positiveZ{};
+    if (!reconstructHeadBasisFromFrameInfoViews(
+            views,
+            center,
+            right,
+            up,
+            forward,
+            positiveZ)) {
         return pointHeadRH;
     }
 
-    const Vec3 p = toVec3(pointHeadRH);
-    const Vec3 world = addVec3(addVec3(addVec3(center, mulVec3(right, p.x)), mulVec3(up, p.y)), mulVec3(positiveZ, p.z));
-    return toVarjoVector3D(world);
+    const Vec3 point = toVec3(pointHeadRH);
+    return toVarjoVector3D(addVec3(
+        addVec3(
+            addVec3(center, mulVec3(right, point.x)),
+            mulVec3(up, point.y)),
+        mulVec3(positiveZ, point.z)));
 }
 
-void setCurrentThreadLowPriorityForWaitSync()
+void copyViewInfo(const varjo_ViewInfo& source, varjo_ViewInfo& destination)
 {
-    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_LOWEST);
+    std::copy(
+        std::begin(source.projectionMatrix),
+        std::end(source.projectionMatrix),
+        std::begin(destination.projectionMatrix));
+    std::copy(
+        std::begin(source.viewMatrix),
+        std::end(source.viewMatrix),
+        std::begin(destination.viewMatrix));
+    destination.preferredWidth = source.preferredWidth;
+    destination.preferredHeight = source.preferredHeight;
+    destination.enabled = source.enabled;
+    destination.reserved = source.reserved;
 }
 
-void copyViewInfo(const varjo_ViewInfo& src, varjo_ViewInfo& dst)
+void copyFrameInfo(const FrameInfo& source, FrameInfo& destination)
 {
-    std::copy(std::begin(src.projectionMatrix), std::end(src.projectionMatrix), std::begin(dst.projectionMatrix));
-    std::copy(std::begin(src.viewMatrix), std::end(src.viewMatrix), std::begin(dst.viewMatrix));
-    dst.preferredWidth = src.preferredWidth;
-    dst.preferredHeight = src.preferredHeight;
-    dst.enabled = src.enabled;
-    dst.reserved = src.reserved;
-}
-
-void copyFrameInfo(const FrameInfo& src, FrameInfo& dst)
-{
-    dst.views.resize(src.views.size());
-    for (size_t i = 0; i < src.views.size(); ++i) {
-        copyViewInfo(src.views[i], dst.views[i]);
+    destination.views.resize(source.views.size());
+    for (size_t index = 0; index < source.views.size(); ++index) {
+        copyViewInfo(source.views[index], destination.views[index]);
     }
-    dst.displayTime = src.displayTime;
-    dst.frameNumber = src.frameNumber;
+    destination.displayTime = source.displayTime;
+    destination.frameNumber = source.frameNumber;
 }
 
 FrameInfo makeEmptyFrameInfo(size_t viewCount)
 {
-    FrameInfo frameInfo{};
-    frameInfo.views.resize(viewCount);
-    frameInfo.displayTime = 0;
-    frameInfo.frameNumber = 0;
-    return frameInfo;
+    FrameInfo result{};
+    result.views.resize(viewCount);
+    return result;
 }
 
-FrameInfo makeFrameInfoFromSnapshot(const VarjoFrameInfoSnapshot& snapshot, size_t fallbackViewCount)
+FrameInfo makeFrameInfoFromSnapshot(
+    const VarjoFrameInfoSnapshot& snapshot,
+    size_t fallbackViewCount)
 {
-    FrameInfo frameInfo{};
-    frameInfo.views = snapshot.views;
-    if (frameInfo.views.empty()) {
-        frameInfo.views.resize(fallbackViewCount);
-    }
-    frameInfo.displayTime = snapshot.displayTime;
-    frameInfo.frameNumber = snapshot.frameNumber;
-    return frameInfo;
+    FrameInfo result{};
+    result.views = snapshot.views;
+    if (result.views.empty()) result.views.resize(fallbackViewCount);
+    result.displayTime = snapshot.displayTime;
+    result.frameNumber = snapshot.frameNumber;
+    return result;
 }
 
 template <typename FrameInfoContainer>
@@ -241,11 +251,9 @@ std::optional<FrameInfo> findFrameInfoAtOrBeforeOrClosestBoundary(
     const FrameInfoContainer& frameInfos,
     varjo_Nanoseconds target)
 {
-    if (frameInfos.empty()) {
-        return std::nullopt;
-    }
+    if (frameInfos.empty()) return std::nullopt;
 
-    auto it = std::upper_bound(
+    auto iterator = std::upper_bound(
         frameInfos.begin(),
         frameInfos.end(),
         target,
@@ -253,43 +261,41 @@ std::optional<FrameInfo> findFrameInfoAtOrBeforeOrClosestBoundary(
             return targetTime < frameInfo.displayTime;
         });
 
-    if (it == frameInfos.begin()) {
-        FrameInfo out{};
-        copyFrameInfo(*it, out);
-        return out;
+    if (iterator == frameInfos.begin()) {
+        FrameInfo result{};
+        copyFrameInfo(*iterator, result);
+        return result;
     }
 
-    --it;
-    FrameInfo out{};
-    copyFrameInfo(*it, out);
-    return out;
+    --iterator;
+    FrameInfo result{};
+    copyFrameInfo(*iterator, result);
+    return result;
 }
 
-varjo_Vector3D toRightHandedPointFromGaze(const double p[3])
+varjo_Vector3D toRightHandedPointFromGaze(const double value[3])
 {
-    return varjo_Vector3D{p[0], p[1], -p[2]};
+    return varjo_Vector3D{value[0], value[1], -value[2]};
 }
 
-varjo_Vector3D toRightHandedDirectionFromGaze(const double d[3])
+varjo_Vector3D toRightHandedDirectionFromGaze(const double value[3])
 {
-    return varjo_Vector3D{d[0], d[1], -d[2]};
+    return varjo_Vector3D{value[0], value[1], -value[2]};
 }
 
 varjo_Vector3D makeGazePointInHeadSpaceRH(const varjo_Ray& ray, double distance)
 {
     const varjo_Vector3D origin = toRightHandedPointFromGaze(ray.origin);
     const varjo_Vector3D forward = toRightHandedDirectionFromGaze(ray.forward);
-
     return varjo_Vector3D{
         origin.x + forward.x * distance,
         origin.y + forward.y * distance,
-        origin.z + forward.z * distance
-    };
+        origin.z + forward.z * distance};
 }
 
-bool isFinite2(const varjo_Vector2Df& p)
+bool isFinite2(const varjo_Vector2Df& value)
 {
-    return std::isfinite(p.x) && std::isfinite(p.y);
+    return std::isfinite(value.x) && std::isfinite(value.y);
 }
 
 varjo_Vector2Df ndcToDisplayUv01(const varjo_Vector2Df& ndc)
@@ -298,24 +304,12 @@ varjo_Vector2Df ndcToDisplayUv01(const varjo_Vector2Df& ndc)
         const float nan = std::numeric_limits<float>::quiet_NaN();
         return varjo_Vector2Df{nan, nan};
     }
-
-    return varjo_Vector2Df{
-        ndc.x * 0.5f + 0.5f,
-        0.5f - ndc.y * 0.5f
-    };
+    return varjo_Vector2Df{ndc.x * 0.5f + 0.5f, 0.5f - ndc.y * 0.5f};
 }
 
 std::string optionalDoubleToCsv(const std::optional<double>& value)
 {
-    if (!value.has_value()) {
-        return {};
-    }
-    return VarjoToolkit::Csv::number(value.value());
-}
-
-std::string optionalStringToCsv(const std::string& value)
-{
-    return value;
+    return value.has_value() ? VarjoToolkit::Csv::number(*value) : std::string{};
 }
 
 std::string emptyGazeCsv()
@@ -347,16 +341,20 @@ std::string frameInfoHeaderCsv(const std::string& name, size_t viewCount)
 {
     std::vector<std::string> fields;
     fields.reserve(viewCount + 1);
-    for (size_t i = 0; i < viewCount; ++i) {
-        fields.push_back(VarjoToolkit::Csv::headerForViewInfo(name + ".views[" + std::to_string(i) + "]"));
+    for (size_t index = 0; index < viewCount; ++index) {
+        fields.push_back(VarjoToolkit::Csv::headerForViewInfo(
+            name + ".views[" + std::to_string(index) + "]"));
     }
-    fields.push_back(VarjoToolkit::Csv::makeHeader(name, {"displayTime", "frameNumber"}));
+    fields.push_back(VarjoToolkit::Csv::makeHeader(
+        name,
+        {"displayTime", "frameNumber"}));
     return VarjoToolkit::Csv::join(fields);
 }
 
 } // namespace
 
-VarjoEyeTrackingProvider::VarjoEyeTrackingProvider(const std::shared_ptr<varjo_Session>& session)
+VarjoEyeTrackingProvider::VarjoEyeTrackingProvider(
+    const std::shared_ptr<varjo_Session>& session)
     : session_(session)
     , viewCount_(session ? varjo_GetViewCount(session.get()) : 0)
 {
@@ -366,383 +364,376 @@ VarjoEyeTrackingProvider::VarjoEyeTrackingProvider(const std::shared_ptr<varjo_S
 
 VarjoEyeTrackingProvider::~VarjoEyeTrackingProvider()
 {
-    VTK_SD_LOG("VarjoEyeTrackingProvider destructor");
     shutdown();
 }
 
-void VarjoEyeTrackingProvider::initialize(OutputFilterType outputFilterType, OutputFrequency outputFrequency)
+void VarjoEyeTrackingProvider::initialize(
+    OutputFilterType outputFilterType,
+    OutputFrequency outputFrequency)
 {
-    VTK_SD_LOG("VarjoEyeTrackingProvider::initialize filter=" << outputFilterTypeName(outputFilterType)
-        << " frequency=" << outputFrequencyName(outputFrequency)
-        << " viewCount=" << viewCount_);
+    VTK_SD_LOG("VarjoEyeTrackingProvider::initialize filter="
+        << outputFilterTypeName(outputFilterType)
+        << " frequency=" << outputFrequencyName(outputFrequency));
+
+    {
+        std::lock_guard<std::mutex> lock(frameInfoMtx_);
+        frameInfos_.clear();
+        submittedFrameInfoCount_ = 0;
+        droppedFrameInfoCount_ = 0;
+    }
 
     if (!session_) {
         VTK_SD_ERROR("VarjoEyeTrackingProvider initialize failed: session is null");
         return;
     }
 
-    if (this->getFrameInfoWorker_.joinable()) {
-        VTK_SD_WARN("VarjoEyeTrackingProvider initialize skipped because frame info worker is already running");
-        return;
-    }
+    varjo_GazeParameters parameters[2]{};
+    parameters[0].key = varjo_GazeParametersKey_OutputFilterType;
+    parameters[0].value = outputFilterType == OutputFilterType::NONE
+        ? varjo_GazeParametersValue_OutputFilterNone
+        : varjo_GazeParametersValue_OutputFilterStandard;
 
-    this->workerStopSignal_.store(false);
-    this->getFrameInfoWorker_ = std::thread(&VarjoEyeTrackingProvider::getFrameInfoWorkerFunction, this);
-    SetThreadPriority(static_cast<HANDLE>(this->getFrameInfoWorker_.native_handle()), THREAD_PRIORITY_LOWEST);
-    VTK_SD_LOG("VarjoEyeTrackingProvider frame info worker started capacity=" << frameInfoCapacity_);
-
-    while (!this->workerStopSignal_.load()) {
-        {
-            std::lock_guard lock(this->frameInfoMtx_);
-            if (this->frameInfos_.size() >= this->frameInfoCapacity_) {
-                break;
-            }
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    size_t frame_info_size = 0;
-    {
-        std::lock_guard lock(this->frameInfoMtx_);
-        frame_info_size = this->frameInfos_.size();
-    }
-    VTK_SD_LOG("VarjoEyeTrackingProvider frame info buffer filled size=" << frame_info_size
-        << " capacity=" << frameInfoCapacity_);
-
-    varjo_GazeParameters params[2];
-    params[0].key = varjo_GazeParametersKey_OutputFilterType;
-    switch (outputFilterType) {
-    case OutputFilterType::NONE:
-        params[0].value = varjo_GazeParametersValue_OutputFilterNone;
-        break;
-    case OutputFilterType::STANDARD:
-    default:
-        params[0].value = varjo_GazeParametersValue_OutputFilterStandard;
-        break;
-    }
-
-    params[1].key = varjo_GazeParametersKey_OutputFrequency;
+    parameters[1].key = varjo_GazeParametersKey_OutputFrequency;
     switch (outputFrequency) {
     case OutputFrequency::_100HZ:
-        params[1].value = varjo_GazeParametersValue_OutputFrequency100Hz;
+        parameters[1].value = varjo_GazeParametersValue_OutputFrequency100Hz;
         break;
     case OutputFrequency::_200HZ:
-        params[1].value = varjo_GazeParametersValue_OutputFrequency200Hz;
+        parameters[1].value = varjo_GazeParametersValue_OutputFrequency200Hz;
         break;
     case OutputFrequency::MAXIMUM:
     default:
-        params[1].value = varjo_GazeParametersValue_OutputFrequencyMaximumSupported;
+        parameters[1].value = varjo_GazeParametersValue_OutputFrequencyMaximumSupported;
         break;
     }
 
-    VTK_SD_LOG("varjo_GazeInitWithParameters filter=" << outputFilterTypeName(outputFilterType)
-        << " frequency=" << outputFrequencyName(outputFrequency));
-    varjo_GazeInitWithParameters(this->session_.get(), params, static_cast<int32_t>(std::size(params)));
-    VTK_SD_LOG("VarjoEyeTrackingProvider initialized status=" << gazeStatusName(getStatus()));
+    varjo_GazeInitWithParameters(
+        session_.get(),
+        parameters,
+        static_cast<int32_t>(std::size(parameters)));
+    VTK_SD_LOG("VarjoEyeTrackingProvider initialized status="
+        << gazeStatusName(getStatus()));
 }
 
 void VarjoEyeTrackingProvider::shutdown()
 {
-    VTK_SD_LOG("VarjoEyeTrackingProvider::shutdown workerRunning=" << (this->getFrameInfoWorker_.joinable() ? "true" : "false"));
-    this->workerStopSignal_.store(true);
-    if (this->getFrameInfoWorker_.joinable()) {
-        VTK_SD_LOG("joining VarjoEyeTrackingProvider frame info worker");
-        this->getFrameInfoWorker_.join();
+    std::lock_guard<std::mutex> lock(frameInfoMtx_);
+    frameInfos_.clear();
+}
+
+bool VarjoEyeTrackingProvider::submitFrameInfo(
+    const VarjoFrameInfoSnapshot& snapshot)
+{
+    if (!snapshot.valid || snapshot.views.empty() || snapshot.displayTime <= 0) {
+        VTK_SD_WARN("VarjoEyeTrackingProvider rejected invalid external frame info");
+        return false;
     }
+
+    FrameInfo frameInfo = makeFrameInfoFromSnapshot(
+        snapshot,
+        static_cast<size_t>(viewCount_));
+
+    std::lock_guard<std::mutex> lock(frameInfoMtx_);
+    if (!frameInfos_.empty() &&
+        frameInfo.displayTime < frameInfos_.back().displayTime) {
+        const auto insertionPoint = std::upper_bound(
+            frameInfos_.begin(),
+            frameInfos_.end(),
+            frameInfo.displayTime,
+            [](varjo_Nanoseconds displayTime, const FrameInfo& item) {
+                return displayTime < item.displayTime;
+            });
+        frameInfos_.insert(insertionPoint, std::move(frameInfo));
+    } else {
+        frameInfos_.push_back(std::move(frameInfo));
+    }
+
+    ++submittedFrameInfoCount_;
+    while (frameInfos_.size() > frameInfoCapacity_) {
+        frameInfos_.pop_front();
+        ++droppedFrameInfoCount_;
+        if (shouldLogCounter(droppedFrameInfoCount_)) {
+            VTK_SD_WARN("VarjoEyeTrackingProvider frame history dropped oldest totalDropped="
+                << droppedFrameInfoCount_);
+        }
+    }
+    return true;
+}
+
+uint64_t VarjoEyeTrackingProvider::submittedFrameInfoCount() const noexcept
+{
+    std::lock_guard<std::mutex> lock(frameInfoMtx_);
+    return submittedFrameInfoCount_;
+}
+
+uint64_t VarjoEyeTrackingProvider::droppedFrameInfoCount() const noexcept
+{
+    std::lock_guard<std::mutex> lock(frameInfoMtx_);
+    return droppedFrameInfoCount_;
 }
 
 VarjoEyeTrackingProvider::Status VarjoEyeTrackingProvider::getStatus() const
 {
-    varjo_SyncProperties(this->session_.get());
-
-    if (!varjo_GetPropertyBool(this->session_.get(), varjo_PropertyKey_GazeAllowed)) {
+    if (!session_) return Status::NOT_CONNECTED;
+    varjo_SyncProperties(session_.get());
+    if (!varjo_GetPropertyBool(session_.get(), varjo_PropertyKey_GazeAllowed)) {
         return Status::NOT_AVAILABLE;
     }
-    if (!varjo_GetPropertyBool(this->session_.get(), varjo_PropertyKey_HMDConnected)) {
+    if (!varjo_GetPropertyBool(session_.get(), varjo_PropertyKey_HMDConnected)) {
         return Status::NOT_CONNECTED;
     }
-    if (varjo_GetPropertyBool(this->session_.get(), varjo_PropertyKey_GazeCalibrating)) {
+    if (varjo_GetPropertyBool(session_.get(), varjo_PropertyKey_GazeCalibrating)) {
         return Status::CALIBRATING;
     }
-    if (varjo_GetPropertyBool(this->session_.get(), varjo_PropertyKey_GazeCalibrated)) {
+    if (varjo_GetPropertyBool(session_.get(), varjo_PropertyKey_GazeCalibrated)) {
         return Status::CALIBRATED;
     }
     return Status::NOT_CALIBRATED;
 }
 
-std::vector<std::pair<varjo_Gaze, varjo_EyeMeasurements>> VarjoEyeTrackingProvider::getGazeDataWithEyeMeasurements() const
+std::vector<std::pair<varjo_Gaze, varjo_EyeMeasurements>>
+VarjoEyeTrackingProvider::getGazeDataWithEyeMeasurements() const
 {
-    constexpr size_t c_growStep = 16;
-    std::array<varjo_Gaze, c_growStep> gazeArray;
-    std::array<varjo_EyeMeasurements, c_growStep> eyeMeasurementsArray;
+    constexpr size_t growStep = 16;
+    std::array<varjo_Gaze, growStep> gazeArray{};
+    std::array<varjo_EyeMeasurements, growStep> measurementArray{};
 
     std::vector<std::pair<varjo_Gaze, varjo_EyeMeasurements>> output;
     int32_t newItems = 0;
     do {
-        newItems = varjo_GetGazeDataArray(this->session_.get(), gazeArray.data(), eyeMeasurementsArray.data(), c_growStep);
+        newItems = varjo_GetGazeDataArray(
+            session_.get(),
+            gazeArray.data(),
+            measurementArray.data(),
+            static_cast<int32_t>(growStep));
         output.reserve(output.size() + static_cast<size_t>(newItems));
-        for (int32_t i = 0; i < newItems; ++i) {
-            output.push_back({gazeArray[i], eyeMeasurementsArray[i]});
+        for (int32_t index = 0; index < newItems; ++index) {
+            output.push_back({gazeArray[index], measurementArray[index]});
         }
-    } while (newItems == static_cast<int32_t>(c_growStep));
-
+    } while (newItems == static_cast<int32_t>(growStep));
     return output;
 }
 
 std::optional<double> VarjoEyeTrackingProvider::getUserIPD() const
 {
-    varjo_SyncProperties(this->session_.get());
-    const double estimate = varjo_GetPropertyDouble(this->session_.get(), varjo_PropertyKey_GazeIPDEstimate);
-    return (estimate <= 0.0) ? std::nullopt : std::make_optional(estimate);
+    varjo_SyncProperties(session_.get());
+    const double value = varjo_GetPropertyDouble(
+        session_.get(),
+        varjo_PropertyKey_GazeIPDEstimate);
+    return value > 0.0 ? std::make_optional(value) : std::nullopt;
 }
 
 std::optional<double> VarjoEyeTrackingProvider::getHMDIPD() const
 {
-    varjo_SyncProperties(this->session_.get());
-    const double positionInMM = varjo_GetPropertyDouble(this->session_.get(), varjo_PropertyKey_IPDPosition);
-    return (positionInMM <= 0.0) ? std::nullopt : std::make_optional(positionInMM);
+    varjo_SyncProperties(session_.get());
+    const double value = varjo_GetPropertyDouble(
+        session_.get(),
+        varjo_PropertyKey_IPDPosition);
+    return value > 0.0 ? std::make_optional(value) : std::nullopt;
 }
 
 std::string VarjoEyeTrackingProvider::getIPDAdjustmentMode() const
 {
-    varjo_SyncProperties(this->session_.get());
+    varjo_SyncProperties(session_.get());
+    const uint32_t size = varjo_GetPropertyStringSize(
+        session_.get(),
+        varjo_PropertyKey_IPDAdjustmentMode);
+    if (size <= 1) return {};
 
-    const uint32_t strSizeWithNullTerm = varjo_GetPropertyStringSize(this->session_.get(), varjo_PropertyKey_IPDAdjustmentMode);
-    if (strSizeWithNullTerm <= 1) {
-        return {};
-    }
-
-    std::vector<char> buffer(strSizeWithNullTerm);
-    varjo_GetPropertyString(this->session_.get(), varjo_PropertyKey_IPDAdjustmentMode, buffer.data(), static_cast<uint32_t>(buffer.size()));
+    std::vector<char> buffer(size);
+    varjo_GetPropertyString(
+        session_.get(),
+        varjo_PropertyKey_IPDAdjustmentMode,
+        buffer.data(),
+        static_cast<uint32_t>(buffer.size()));
     return std::string(buffer.data());
 }
 
 std::optional<varjo_Gaze> VarjoEyeTrackingProvider::getRenderingGaze() const
 {
     varjo_Gaze renderingGaze{};
-    const auto ret = varjo_GetRenderingGaze(this->session_.get(), &renderingGaze);
-    if (!ret) {
-        return std::nullopt;
-    }
-    return renderingGaze;
+    return varjo_GetRenderingGaze(session_.get(), &renderingGaze)
+        ? std::make_optional(renderingGaze)
+        : std::nullopt;
 }
 
-std::vector<VarjoEyeTrackingData> VarjoEyeTrackingProvider::getEyeTrackingData()
+std::vector<VarjoEyeTrackingData>
+VarjoEyeTrackingProvider::getEyeTrackingData()
 {
-    auto gaze_and_measurements = this->getGazeDataWithEyeMeasurements();
-    if (gaze_and_measurements.empty()) {
-        return {};
-    }
+    auto gazeAndMeasurements = getGazeDataWithEyeMeasurements();
+    if (gazeAndMeasurements.empty()) return {};
 
-    const auto userIPD = this->getUserIPD();
-    const auto hmdIPD = this->getHMDIPD();
-    const auto ipdAdjustmentMode = this->getIPDAdjustmentMode();
-    const auto renderingGaze = this->getRenderingGaze();
+    const auto userIPD = getUserIPD();
+    const auto hmdIPD = getHMDIPD();
+    const auto ipdAdjustmentMode = getIPDAdjustmentMode();
+    const auto renderingGaze = getRenderingGaze();
 
     std::vector<FrameInfo> frameInfoCopy;
     std::optional<FrameInfo> renderingFrameInfo;
     {
-        std::lock_guard lock(this->frameInfoMtx_);
-        frameInfoCopy.assign(this->frameInfos_.begin(), this->frameInfos_.end());
+        std::lock_guard<std::mutex> lock(frameInfoMtx_);
+        frameInfoCopy.assign(frameInfos_.begin(), frameInfos_.end());
         if (renderingGaze.has_value()) {
-            renderingFrameInfo = findFrameInfoAtOrBeforeOrClosestBoundary(frameInfoCopy, renderingGaze.value().captureTime);
+            renderingFrameInfo = findFrameInfoAtOrBeforeOrClosestBoundary(
+                frameInfoCopy,
+                renderingGaze->captureTime);
         }
     }
 
     if (frameInfoCopy.empty()) {
-        frameInfoCopy.push_back(makeEmptyFrameInfo(static_cast<size_t>(this->viewCount_)));
+        frameInfoCopy.push_back(makeEmptyFrameInfo(static_cast<size_t>(viewCount_)));
     }
 
-    std::optional<VarjoProjectedGazePosition> renderingGazePos_toVideo = std::nullopt;
-    std::optional<VarjoProjectedGazePosition> renderingGazePos_toVarjoDisplay = std::nullopt;
+    std::optional<VarjoProjectedGazePosition> renderingVideoPosition;
+    std::optional<VarjoProjectedGazePosition> renderingDisplayPosition;
     if (renderingGaze.has_value() && renderingFrameInfo.has_value()) {
-        renderingGazePos_toVideo = this->calcProjectedGazePositionToVideo(renderingGaze.value(), renderingFrameInfo->views);
-        renderingGazePos_toVarjoDisplay = this->calcProjectedGazePositionToVarjoDisplay(renderingGaze.value(), renderingFrameInfo->views);
+        renderingVideoPosition = calcProjectedGazePositionToVideo(
+            *renderingGaze,
+            renderingFrameInfo->views);
+        renderingDisplayPosition = calcProjectedGazePositionToVarjoDisplay(
+            *renderingGaze,
+            renderingFrameInfo->views);
     }
 
-    std::vector<VarjoEyeTrackingData> datas(gaze_and_measurements.size());
-    for (size_t i = 0; i < gaze_and_measurements.size(); ++i) {
-        const auto& gaze = gaze_and_measurements[i].first;
-        FrameInfo sampleFrameInfo = findFrameInfoAtOrBeforeOrClosestBoundary(frameInfoCopy, gaze.captureTime).value_or(frameInfoCopy.back());
+    std::vector<VarjoEyeTrackingData> output(gazeAndMeasurements.size());
+    for (size_t index = 0; index < gazeAndMeasurements.size(); ++index) {
+        const auto& gaze = gazeAndMeasurements[index].first;
+        FrameInfo sampleFrameInfo =
+            findFrameInfoAtOrBeforeOrClosestBoundary(
+                frameInfoCopy,
+                gaze.captureTime).value_or(frameInfoCopy.back());
 
         VarjoEyeTrackingData data{};
         data.gaze = gaze;
-        data.measurements = gaze_and_measurements[i].second;
+        data.measurements = gazeAndMeasurements[index].second;
         data.userIPD = userIPD;
         data.hmdIPD = hmdIPD;
         data.ipdAdjustmentMode = ipdAdjustmentMode;
         data.renderingGaze = renderingGaze;
-        data.gazePos_toVideo = this->calcProjectedGazePositionToVideo(gaze, sampleFrameInfo.views);
-        data.renderingGazePos_toVideo = renderingGazePos_toVideo;
-        data.gazePos_toVarjoDisplay = this->calcProjectedGazePositionToVarjoDisplay(gaze, sampleFrameInfo.views);
-        data.renderingGazePos_toVarjoDisplay = renderingGazePos_toVarjoDisplay;
+        data.gazePos_toVideo = calcProjectedGazePositionToVideo(
+            gaze,
+            sampleFrameInfo.views);
+        data.renderingGazePos_toVideo = renderingVideoPosition;
+        data.gazePos_toVarjoDisplay = calcProjectedGazePositionToVarjoDisplay(
+            gaze,
+            sampleFrameInfo.views);
+        data.renderingGazePos_toVarjoDisplay = renderingDisplayPosition;
         data.frameInfo = std::move(sampleFrameInfo);
         data.renderingGazeFrameInfo = renderingFrameInfo;
-        datas[i] = std::move(data);
+        output[index] = std::move(data);
     }
-
-    return datas;
+    return output;
 }
 
-VarjoProjectedGazePosition VarjoEyeTrackingProvider::calcProjectedGazePositionToVarjoDisplay(
+VarjoProjectedGazePosition
+VarjoEyeTrackingProvider::calcProjectedGazePositionToVarjoDisplay(
     const varjo_Gaze& gaze,
     const std::vector<varjo_ViewInfo>& viewInfo) const
 {
-    VarjoProjectedGazePosition out{};
-    if (viewInfo.size() < 2) {
-        return out;
-    }
+    VarjoProjectedGazePosition output{};
+    if (viewInfo.size() < 2) return output;
 
-    out.leftEye = calcProjectedGazePositionToVarjoDisplayOneRay(gaze.leftEye, gaze.focusDistance, viewInfo, 0);
-    out.rightEye = calcProjectedGazePositionToVarjoDisplayOneRay(gaze.rightEye, gaze.focusDistance, viewInfo, 1);
-    out.combinedEyeToLeft = calcProjectedGazePositionToVarjoDisplayOneRay(gaze.gaze, gaze.focusDistance, viewInfo, 0);
-    out.combinedEyeToRight = calcProjectedGazePositionToVarjoDisplayOneRay(gaze.gaze, gaze.focusDistance, viewInfo, 1);
-    return out;
+    output.leftEye = calcProjectedGazePositionToVarjoDisplayOneRay(
+        gaze.leftEye,
+        gaze.focusDistance,
+        viewInfo,
+        0);
+    output.rightEye = calcProjectedGazePositionToVarjoDisplayOneRay(
+        gaze.rightEye,
+        gaze.focusDistance,
+        viewInfo,
+        1);
+    output.combinedEyeToLeft = calcProjectedGazePositionToVarjoDisplayOneRay(
+        gaze.gaze,
+        gaze.focusDistance,
+        viewInfo,
+        0);
+    output.combinedEyeToRight = calcProjectedGazePositionToVarjoDisplayOneRay(
+        gaze.gaze,
+        gaze.focusDistance,
+        viewInfo,
+        1);
+    return output;
 }
 
-varjo_Vector2Df VarjoEyeTrackingProvider::calcProjectedGazePositionToVarjoDisplayOneRay(
+varjo_Vector2Df
+VarjoEyeTrackingProvider::calcProjectedGazePositionToVarjoDisplayOneRay(
     const varjo_Ray& gazeRay,
     double focusDistance,
     const std::vector<varjo_ViewInfo>& viewInfo,
     size_t targetViewIndex) const
 {
     double distance = focusDistance;
-    if (!(distance > 0.01 && distance <= 2.0)) {
-        distance = 1.0;
-    }
-
-    if (viewInfo.size() <= targetViewIndex || viewInfo.size() < 2) {
+    if (!(distance > 0.01 && distance <= 2.0)) distance = 1.0;
+    if (viewInfo.size() < 2 || viewInfo.size() <= targetViewIndex) {
         return {0.0f, 0.0f};
     }
 
-    const varjo_Vector3D pointHeadRH = makeGazePointInHeadSpaceRH(gazeRay, distance);
-    const varjo_Vector3D pointWorld = transformHeadPointToWorldUsingFrameInfo(viewInfo, pointHeadRH);
+    const varjo_Vector3D pointHead = makeGazePointInHeadSpaceRH(
+        gazeRay,
+        distance);
+    const varjo_Vector3D pointWorld = transformHeadPointToWorldUsingFrameInfo(
+        viewInfo,
+        pointHead);
+    const Vec4 eye = mulMat4Vec4(
+        viewInfo[targetViewIndex].viewMatrix,
+        Vec4{pointWorld.x, pointWorld.y, pointWorld.z, 1.0});
+    const Vec4 clip = mulMat4Vec4(
+        viewInfo[targetViewIndex].projectionMatrix,
+        eye);
 
-    const Vec4 pWorld{pointWorld.x, pointWorld.y, pointWorld.z, 1.0};
-    const varjo_ViewInfo& targetView = viewInfo[targetViewIndex];
-    const Vec4 pEye = mulMat4Vec4(targetView.viewMatrix, pWorld);
-    const Vec4 pClip = mulMat4Vec4(targetView.projectionMatrix, pEye);
-
-    if (std::abs(pClip.w) < 1e-12) {
-        return {0.0f, 0.0f};
-    }
-
-    varjo_Vector2Df out{};
-    out.x = static_cast<float>(pClip.x / pClip.w);
-    out.y = static_cast<float>(pClip.y / pClip.w);
-    if (std::isfinite(out.x) && std::isfinite(out.y)) {
-        return out;
-    }
-    return {0.0f, 0.0f};
+    if (std::abs(clip.w) < 1.0e-12) return {0.0f, 0.0f};
+    const varjo_Vector2Df output{
+        static_cast<float>(clip.x / clip.w),
+        static_cast<float>(clip.y / clip.w)};
+    return isFinite2(output) ? output : varjo_Vector2Df{0.0f, 0.0f};
 }
 
-VarjoProjectedGazePosition VarjoEyeTrackingProvider::calcProjectedGazePositionToVideo(
+VarjoProjectedGazePosition
+VarjoEyeTrackingProvider::calcProjectedGazePositionToVideo(
     const varjo_Gaze& gaze,
     const std::vector<varjo_ViewInfo>& viewInfo) const
 {
-    const VarjoProjectedGazePosition ndc = this->calcProjectedGazePositionToVarjoDisplay(gaze, viewInfo);
-
-    VarjoProjectedGazePosition result{};
-    result.leftEye = ndcToDisplayUv01(ndc.leftEye);
-    result.rightEye = ndcToDisplayUv01(ndc.rightEye);
-    result.combinedEyeToLeft = ndcToDisplayUv01(ndc.combinedEyeToLeft);
-    result.combinedEyeToRight = ndcToDisplayUv01(ndc.combinedEyeToRight);
-    return result;
+    const auto ndc = calcProjectedGazePositionToVarjoDisplay(gaze, viewInfo);
+    return VarjoProjectedGazePosition{
+        ndcToDisplayUv01(ndc.leftEye),
+        ndcToDisplayUv01(ndc.rightEye),
+        ndcToDisplayUv01(ndc.combinedEyeToLeft),
+        ndcToDisplayUv01(ndc.combinedEyeToRight)};
 }
 
-FrameInfo VarjoEyeTrackingProvider::requestFrameInfo()
-{
-    VarjoFrameInfo frameInfo(this->session_);
-    if (!frameInfo || !frameInfo.waitSync()) {
-        VTK_SD_TRACE("VarjoEyeTrackingProvider requestFrameInfo failed; using empty frame info");
-        return makeEmptyFrameInfo(static_cast<size_t>(this->viewCount_));
-    }
-
-    return makeFrameInfoFromSnapshot(frameInfo.snapshot(), static_cast<size_t>(this->viewCount_));
-}
-
-void VarjoEyeTrackingProvider::getFrameInfoWorkerFunction()
-{
-    VTK_SD_LOG("VarjoEyeTrackingProvider frame info worker started capacity=" << frameInfoCapacity_);
-    setCurrentThreadLowPriorityForWaitSync();
-
-    uint64_t captured_count = 0;
-    uint64_t dropped_count = 0;
-    while (!this->workerStopSignal_.load()) {
-        auto frameInfo = this->requestFrameInfo();
-        {
-            std::lock_guard lock(this->frameInfoMtx_);
-            this->frameInfos_.push_back(std::move(frameInfo));
-            ++captured_count;
-            while (this->frameInfos_.size() > this->frameInfoCapacity_) {
-                this->frameInfos_.pop_front();
-                ++dropped_count;
-                if (shouldLogCounter(dropped_count)) {
-                    VTK_SD_WARN("VarjoEyeTrackingProvider frame info history dropped totalDropped=" << dropped_count);
-                }
-            }
-        }
-    }
-
-    size_t final_size = 0;
-    {
-        std::lock_guard lock(this->frameInfoMtx_);
-        final_size = this->frameInfos_.size();
-    }
-    VTK_SD_LOG("VarjoEyeTrackingProvider frame info worker stopped captured=" << captured_count
-        << " dropped=" << dropped_count
-        << " finalSize=" << final_size);
-}
-
-VarjoEyeTrackingDataLogger::VarjoEyeTrackingDataLogger(const std::string& filepath, std::shared_ptr<varjo_Session> session)
+VarjoEyeTrackingDataLogger::VarjoEyeTrackingDataLogger(
+    const std::string& filepath,
+    std::shared_ptr<varjo_Session> session)
     : session_(std::move(session))
     , filepath_(filepath)
-    , viewCount_(varjo_GetViewCount(session_.get()))
-{
-    VTK_SD_LOG("VarjoEyeTrackingDataLogger constructor path=" << filepath_.string()
-        << " viewCount=" << viewCount_);
-}
+    , viewCount_(session_ ? varjo_GetViewCount(session_.get()) : 0)
+{}
 
 VarjoEyeTrackingDataLogger::~VarjoEyeTrackingDataLogger()
 {
-    VTK_SD_LOG("VarjoEyeTrackingDataLogger destructor open=" << (logfile_.is_open() ? "true" : "false"));
     close();
 }
 
 bool VarjoEyeTrackingDataLogger::open()
 {
-    VTK_SD_LOG("VarjoEyeTrackingDataLogger::open path=" << this->filepath_.string());
-    if (this->logfile_.is_open()) {
-        VTK_SD_WARN("VarjoEyeTrackingDataLogger open skipped because log file is already open");
-        return false;
-    }
-
-    this->logfile_.open(this->filepath_.string());
-    if (this->logfile_.is_open()) {
-        this->logfile_ << this->getHeaderCsvString();
-        VTK_SD_LOG("VarjoEyeTrackingDataLogger opened path=" << this->filepath_.string());
-    } else {
-        VTK_SD_ERROR("VarjoEyeTrackingDataLogger open failed path=" << this->filepath_.string());
-    }
-    return this->logfile_.is_open();
+    if (logfile_.is_open()) return false;
+    logfile_.open(filepath_, std::ios::out | std::ios::trunc);
+    if (logfile_.is_open()) logfile_ << getHeaderCsvString();
+    return logfile_.is_open();
 }
 
 void VarjoEyeTrackingDataLogger::close()
 {
-    if (!this->logfile_.is_open()) {
-        return;
+    if (logfile_.is_open()) {
+        logfile_.flush();
+        logfile_.close();
     }
-    VTK_SD_LOG("VarjoEyeTrackingDataLogger closing path=" << this->filepath_.string());
-    this->logfile_.close();
 }
 
 void VarjoEyeTrackingDataLogger::write(const VarjoEyeTrackingData& data)
 {
-    if (!this->logfile_.is_open()) {
-        VTK_SD_TRACE("VarjoEyeTrackingDataLogger write skipped because log file is not open");
-        return;
-    }
-    this->logfile_ << this->varjoEyeTrackingDataToCsvString(data);
+    if (logfile_.is_open()) logfile_ << varjoEyeTrackingDataToCsvString(data);
 }
 
 std::string VarjoEyeTrackingDataLogger::getHeaderCsvString()
@@ -757,177 +748,145 @@ std::string VarjoEyeTrackingDataLogger::getHeaderCsvString()
         VarjoToolkit::Csv::headerForProjectedGazePosition("gazePos_toVarjoDisplay"),
         VarjoToolkit::Csv::headerForProjectedGazePosition("renderingGazePos_toVarjoDisplay"),
         frameInfoHeaderCsv("frameInfo", static_cast<size_t>(viewCount_)),
-        frameInfoHeaderCsv("renderingGazeFrameInfo", static_cast<size_t>(viewCount_))
-    }) + "\n";
+        frameInfoHeaderCsv("renderingGazeFrameInfo", static_cast<size_t>(viewCount_))}) + "\n";
 }
 
-std::string VarjoEyeTrackingDataLogger::varjoEyeTrackingDataToCsvString(const VarjoEyeTrackingData& data)
+std::string VarjoEyeTrackingDataLogger::varjoEyeTrackingDataToCsvString(
+    const VarjoEyeTrackingData& data)
 {
     return VarjoToolkit::Csv::join({
         varjoGazeToCsvString(data.gaze),
         varjoEyeMeasurementsToCsvString(data.measurements),
         optionalDoubleToCsv(data.userIPD),
         optionalDoubleToCsv(data.hmdIPD),
-        optionalStringToCsv(data.ipdAdjustmentMode),
-        data.renderingGaze.has_value() ? varjoGazeToCsvString(data.renderingGaze.value()) : emptyGazeCsv(),
+        data.ipdAdjustmentMode,
+        data.renderingGaze.has_value()
+            ? varjoGazeToCsvString(*data.renderingGaze)
+            : emptyGazeCsv(),
         varjoProjectedGazePositionToCsvString(data.gazePos_toVideo),
-        data.renderingGazePos_toVideo.has_value() ? varjoProjectedGazePositionToCsvString(data.renderingGazePos_toVideo.value()) : emptyProjectedCsv(),
+        data.renderingGazePos_toVideo.has_value()
+            ? varjoProjectedGazePositionToCsvString(*data.renderingGazePos_toVideo)
+            : emptyProjectedCsv(),
         varjoProjectedGazePositionToCsvString(data.gazePos_toVarjoDisplay),
-        data.renderingGazePos_toVarjoDisplay.has_value() ? varjoProjectedGazePositionToCsvString(data.renderingGazePos_toVarjoDisplay.value()) : emptyProjectedCsv(),
+        data.renderingGazePos_toVarjoDisplay.has_value()
+            ? varjoProjectedGazePositionToCsvString(*data.renderingGazePos_toVarjoDisplay)
+            : emptyProjectedCsv(),
         frameInfoToCsvString(data.frameInfo),
-        data.renderingGazeFrameInfo.has_value() ? frameInfoToCsvString(data.renderingGazeFrameInfo.value()) : emptyFrameInfoCsv(static_cast<size_t>(viewCount_))
-    }) + "\n";
+        data.renderingGazeFrameInfo.has_value()
+            ? frameInfoToCsvString(*data.renderingGazeFrameInfo)
+            : emptyFrameInfoCsv(static_cast<size_t>(viewCount_))}) + "\n";
 }
 
-std::string VarjoEyeTrackingDataLogger::varjoGazeToCsvString(const varjo_Gaze& gaze)
+std::string VarjoEyeTrackingDataLogger::varjoGazeToCsvString(
+    const varjo_Gaze& gaze)
 {
     return VarjoToolkit::Csv::toCsv(gaze);
 }
 
-std::string VarjoEyeTrackingDataLogger::varjoEyeMeasurementsToCsvString(const varjo_EyeMeasurements& measurements)
+std::string VarjoEyeTrackingDataLogger::varjoEyeMeasurementsToCsvString(
+    const varjo_EyeMeasurements& measurements)
 {
     return VarjoToolkit::Csv::toCsv(measurements);
 }
 
-std::string VarjoEyeTrackingDataLogger::varjoProjectedGazePositionToCsvString(const VarjoProjectedGazePosition& gazePos)
+std::string VarjoEyeTrackingDataLogger::varjoProjectedGazePositionToCsvString(
+    const VarjoProjectedGazePosition& gazePosition)
 {
-    return VarjoToolkit::Csv::toCsv(gazePos);
+    return VarjoToolkit::Csv::toCsv(gazePosition);
 }
 
-std::string VarjoEyeTrackingDataLogger::frameInfoToCsvString(const FrameInfo& frameInfo)
+std::string VarjoEyeTrackingDataLogger::frameInfoToCsvString(
+    const FrameInfo& frameInfo)
 {
     std::vector<std::string> fields;
     fields.reserve(static_cast<size_t>(viewCount_) + 1);
-
-    for (int i = 0; i < viewCount_; ++i) {
-        if (i >= 0 && static_cast<size_t>(i) < frameInfo.views.size()) {
-            fields.push_back(VarjoToolkit::Csv::toCsv(frameInfo.views[static_cast<size_t>(i)]));
+    for (int index = 0; index < viewCount_; ++index) {
+        if (static_cast<size_t>(index) < frameInfo.views.size()) {
+            fields.push_back(VarjoToolkit::Csv::toCsv(
+                frameInfo.views[static_cast<size_t>(index)]));
         } else {
-            fields.push_back(VarjoToolkit::Csv::emptyFields(viewInfoCsvFieldCount()));
+            fields.push_back(VarjoToolkit::Csv::emptyFields(
+                viewInfoCsvFieldCount()));
         }
     }
-
     fields.push_back(VarjoToolkit::Csv::join({
         std::to_string(frameInfo.displayTime),
-        std::to_string(frameInfo.frameNumber)
-    }));
+        std::to_string(frameInfo.frameNumber)}));
     return VarjoToolkit::Csv::join(fields);
 }
 
 VarjoEyeTrackingService::VarjoEyeTrackingService(
     const std::shared_ptr<varjo_Session>& session,
-    const VarjoEyeTrackingProvider::OutputFilterType outputFilterType,
-    const VarjoEyeTrackingProvider::OutputFrequency outputFrequency,
+    VarjoEyeTrackingProvider::OutputFilterType outputFilterType,
+    VarjoEyeTrackingProvider::OutputFrequency outputFrequency,
     const std::string& filepath,
-    const size_t queueSize,
-    const int acquireFrequencyMs)
+    size_t queueSize,
+    int acquireFrequencyMs)
     : session_(session)
     , outputFilterType_(outputFilterType)
     , outputFrequency_(outputFrequency)
     , eyeTracker_(session)
     , logger_(filepath, session)
-    , dataQueueMaxSize_(queueSize)
-    , acquireFrequencyMs_(acquireFrequencyMs)
-{
-    VTK_SD_LOG("VarjoEyeTrackingService constructor session=" << session_.get()
-        << " filepath=" << filepath
-        << " queueSize=" << dataQueueMaxSize_
-        << " acquireFrequencyMs=" << acquireFrequencyMs_
-        << " filter=" << outputFilterTypeName(outputFilterType_)
-        << " frequency=" << outputFrequencyName(outputFrequency_));
-}
+    , dataQueueMaxSize_(std::max<size_t>(1, queueSize))
+    , acquireFrequencyMs_(std::max(1, acquireFrequencyMs))
+{}
 
 bool VarjoEyeTrackingService::start()
 {
-    VTK_SD_LOG("VarjoEyeTrackingService::start filepath logger/open queueSize=" << dataQueueMaxSize_
-        << " acquireFrequencyMs=" << acquireFrequencyMs_);
-    if (!logger_.open()) {
-        VTK_SD_ERROR("VarjoEyeTrackingService start failed: logger open failed");
-        return false;
-    }
+    stop();
+    if (!logger_.open()) return false;
 
-    this->threadEndSignal_.store(false);
-    this->eyeTracker_.initialize(this->outputFilterType_, this->outputFrequency_);
-    this->dataRequestThread_ = std::thread(&VarjoEyeTrackingService::dataRequestWorker, this);
-    VTK_SD_LOG("VarjoEyeTrackingService data request worker started");
+    threadEndSignal_.store(false);
+    eyeTracker_.initialize(outputFilterType_, outputFrequency_);
+    dataRequestThread_ = std::thread(
+        &VarjoEyeTrackingService::dataRequestWorker,
+        this);
     return true;
 }
 
 void VarjoEyeTrackingService::stop()
 {
-    VTK_SD_LOG("VarjoEyeTrackingService::stop workerRunning=" << (this->dataRequestThread_.joinable() ? "true" : "false"));
-    this->threadEndSignal_.store(true);
-    if (this->dataRequestThread_.joinable()) {
-        VTK_SD_LOG("joining VarjoEyeTrackingService data request worker");
-        this->dataRequestThread_.join();
-    }
-    this->eyeTracker_.shutdown();
-    this->logger_.close();
+    threadEndSignal_.store(true);
+    if (dataRequestThread_.joinable()) dataRequestThread_.join();
+    eyeTracker_.shutdown();
+    logger_.close();
+}
 
-    size_t queue_size = 0;
-    {
-        std::lock_guard<std::mutex> lock(this->dataQueueMutex_);
-        queue_size = this->dataQueue_.size();
-    }
-    VTK_SD_LOG("VarjoEyeTrackingService stopped queueSize=" << queue_size);
+bool VarjoEyeTrackingService::submitFrameInfo(
+    const VarjoFrameInfoSnapshot& snapshot)
+{
+    return eyeTracker_.submitFrameInfo(snapshot);
 }
 
 std::deque<VarjoEyeTrackingData> VarjoEyeTrackingService::requestData()
 {
-    std::deque<VarjoEyeTrackingData> out;
-    {
-        std::lock_guard<std::mutex> lock(this->dataQueueMutex_);
-        out.swap(this->dataQueue_);
-    }
-    VTK_SD_TRACE("VarjoEyeTrackingService::requestData returned=" << out.size());
-    return out;
+    std::deque<VarjoEyeTrackingData> output;
+    std::lock_guard<std::mutex> lock(dataQueueMutex_);
+    output.swap(dataQueue_);
+    return output;
 }
 
 void VarjoEyeTrackingService::dataRequestWorker()
 {
-    VTK_SD_LOG("VarjoEyeTrackingService data request worker started acquireFrequencyMs=" << this->acquireFrequencyMs_
-        << " queueMaxSize=" << this->dataQueueMaxSize_);
-
-    uint64_t poll_count = 0;
-    uint64_t empty_poll_count = 0;
-    uint64_t received_count = 0;
-    uint64_t written_count = 0;
-    uint64_t queue_drop_count = 0;
-
-    while (!this->threadEndSignal_.load()) {
-        ++poll_count;
-        auto datas = this->eyeTracker_.getEyeTrackingData();
-        if (datas.empty()) {
-            ++empty_poll_count;
-        } else {
-            received_count += static_cast<uint64_t>(datas.size());
-            std::lock_guard<std::mutex> lock(this->dataQueueMutex_);
-            for (const auto& data : datas) {
-                this->logger_.write(data);
-                ++written_count;
-                this->dataQueue_.push_back(data);
-                while (this->dataQueue_.size() > this->dataQueueMaxSize_) {
-                    this->dataQueue_.pop_front();
-                    ++queue_drop_count;
-                    if (shouldLogCounter(queue_drop_count)) {
-                        VTK_SD_WARN("VarjoEyeTrackingService data queue dropped old samples totalDropped=" << queue_drop_count
-                            << " queueMaxSize=" << this->dataQueueMaxSize_);
+    uint64_t queueDropCount = 0;
+    while (!threadEndSignal_.load()) {
+        auto dataItems = eyeTracker_.getEyeTrackingData();
+        if (!dataItems.empty()) {
+            std::lock_guard<std::mutex> lock(dataQueueMutex_);
+            for (const auto& data : dataItems) {
+                logger_.write(data);
+                dataQueue_.push_back(data);
+                while (dataQueue_.size() > dataQueueMaxSize_) {
+                    dataQueue_.pop_front();
+                    ++queueDropCount;
+                    if (shouldLogCounter(queueDropCount)) {
+                        VTK_SD_WARN("VarjoEyeTrackingService queue dropped oldest totalDropped="
+                            << queueDropCount);
                     }
                 }
             }
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(this->acquireFrequencyMs_));
+        std::this_thread::sleep_for(
+            std::chrono::milliseconds(acquireFrequencyMs_));
     }
-
-    size_t final_queue_size = 0;
-    {
-        std::lock_guard<std::mutex> lock(this->dataQueueMutex_);
-        final_queue_size = this->dataQueue_.size();
-    }
-    VTK_SD_LOG("VarjoEyeTrackingService data request worker stopped polls=" << poll_count
-        << " emptyPolls=" << empty_poll_count
-        << " received=" << received_count
-        << " written=" << written_count
-        << " queueDropped=" << queue_drop_count
-        << " finalQueueSize=" << final_queue_size);
 }
