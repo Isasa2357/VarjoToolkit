@@ -1,3 +1,4 @@
+#include "hmd_external_frame_sync.hpp"
 #include "hmd_service_performance_common.hpp"
 
 #include <VarjoToolkit/Services/EyeTracking/VarjoEyeTrackingService.hpp>
@@ -30,20 +31,30 @@ void runEyeTrackingPerformanceTest()
     {
         VarjoEyeTrackingProvider statusProvider(session.shared());
         const auto status = statusProvider.getStatus();
-        std::cout << "Gaze status before performance test: " << gazeStatusName(status) << '\n';
+        std::cout << "Gaze status before performance test: "
+                  << gazeStatusName(status) << '\n';
         if (status != VarjoEyeTrackingProvider::Status::CALIBRATED) {
             vtk_hmd_service_test::skipOrFail(
-                std::string("Eye tracking is not ready. Current status: ") + gazeStatusName(status));
+                std::string("Eye tracking is not ready. Current status: ") +
+                gazeStatusName(status));
         }
     }
 
-    const int durationSeconds = vtk_hmd_performance_test::measurementSeconds();
-    const int warmupDurationSeconds = vtk_hmd_performance_test::warmupSeconds();
-    const size_t estimatedSamples = static_cast<size_t>(durationSeconds + warmupDurationSeconds + 10) * 250U;
-    const size_t queueCapacity = std::max<size_t>(5000U, estimatedSamples);
+    const int durationSeconds =
+        vtk_hmd_performance_test::measurementSeconds();
+    const int warmupDurationSeconds =
+        vtk_hmd_performance_test::warmupSeconds();
+    const size_t estimatedSamples =
+        static_cast<size_t>(durationSeconds + warmupDurationSeconds + 10) *
+        250U;
+    const size_t queueCapacity =
+        std::max<size_t>(5000U, estimatedSamples);
 
-    const auto outputDirectory = vtk_hmd_service_test::makeOutputDirectory("eye_tracking_performance");
-    const auto csvPath = outputDirectory / "eye_tracking_performance.csv";
+    const auto outputDirectory =
+        vtk_hmd_service_test::makeOutputDirectory(
+            "eye_tracking_performance");
+    const auto csvPath =
+        outputDirectory / "eye_tracking_performance.csv";
 
     VarjoEyeTrackingService service(
         session.shared(),
@@ -54,18 +65,26 @@ void runEyeTrackingPerformanceTest()
         5);
 
     if (!service.start()) {
-        throw std::runtime_error("VarjoEyeTrackingService::start failed");
+        throw std::runtime_error(
+            "VarjoEyeTrackingService::start failed");
     }
 
     vtk_hmd_service_test::StopGuard<VarjoEyeTrackingService> stopGuard(service);
+    vtk_hmd_test::ExternalFrameInfoPump framePump(
+        session,
+        [&service](const VarjoFrameInfoSnapshot& snapshot) {
+            static_cast<void>(service.submitFrameInfo(snapshot));
+        });
+    VTK_HMD_TEST_REQUIRE(framePump.start());
 
     const auto summary = vtk_hmd_performance_test::measureRate(
-        "Eye tracking",
+        "Eye tracking with external frame info",
         [&]() { return service.getSamplesPerSecond(); },
         [&]() { return service.receivedSampleCount(); },
         durationSeconds,
         warmupDurationSeconds);
 
+    framePump.stop();
     stopGuard.stop();
 
     const uint64_t received = service.receivedSampleCount();
@@ -76,15 +95,22 @@ void runEyeTrackingPerformanceTest()
     VTK_HMD_TEST_REQUIRE(received > 0);
     VTK_HMD_TEST_REQUIRE(processed == received);
     VTK_HMD_TEST_REQUIRE(written == received);
+    VTK_HMD_TEST_REQUIRE(service.submittedFrameInfoCount() > 0);
 
     vtk_hmd_performance_test::printSummary(
-        "Eye tracking",
+        "Eye tracking with external frame info",
         summary,
         received,
         processed,
         written,
         dropped,
         std::nullopt);
+
+    std::cout << "frameInfoSubmitted="
+              << service.submittedFrameInfoCount()
+              << " frameInfoDropped="
+              << service.droppedFrameInfoCount()
+              << '\n';
 
     vtk_hmd_service_test::requireNonEmptyFile(csvPath);
 }
