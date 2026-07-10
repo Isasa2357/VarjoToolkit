@@ -16,7 +16,6 @@
 
 #include <VarjoToolkit/DataStream/VarjoDataStream.hpp>
 #include <VarjoToolkit/DataStream/VarjoDataStreamFrameQueue.hpp>
-#include <VarjoToolkit/Utilities/VarjoSampleRateCounter.hpp>
 
 class VarjoEyeCameraService {
 public:
@@ -46,19 +45,41 @@ public:
     std::wstring lastError() const;
     Paths paths() const;
 
+    // Legacy processed-frame counters. A processed frame reached the writer
+    // thread; writeFailureCount() reports failed raw writes separately.
     uint64_t leftFrameCount() const;
     uint64_t rightFrameCount() const;
     uint64_t droppedFrameCount() const;
     uint64_t writeFailureCount() const;
 
+    uint64_t leftReceivedFrameCount() const
+    {
+        return frame_queue_.pushedCountForChannel(static_cast<int64_t>(varjo_ChannelIndex_Left));
+    }
+
+    uint64_t rightReceivedFrameCount() const
+    {
+        return frame_queue_.pushedCountForChannel(static_cast<int64_t>(varjo_ChannelIndex_Right));
+    }
+
+    uint64_t leftProcessedFrameCount() const { return leftFrameCount(); }
+    uint64_t rightProcessedFrameCount() const { return rightFrameCount(); }
+
+    uint64_t successfulWriteCount() const
+    {
+        const uint64_t processed = leftFrameCount() + rightFrameCount();
+        const uint64_t failures = writeFailureCount();
+        return processed >= failures ? processed - failures : 0;
+    }
+
     double getLeftFramesPerSecond() const
     {
-        return left_rate_counter_.update(leftFrameCount());
+        return frame_queue_.pushedRatePerSecondForChannel(static_cast<int64_t>(varjo_ChannelIndex_Left));
     }
 
     double getRightFramesPerSecond() const
     {
-        return right_rate_counter_.update(rightFrameCount());
+        return frame_queue_.pushedRatePerSecondForChannel(static_cast<int64_t>(varjo_ChannelIndex_Right));
     }
 
 private:
@@ -114,7 +135,7 @@ private:
     VarjoDataStreamFrameQueue<CapturedFrame> frame_queue_;
 
     std::thread writer_thread_;
-    std::atomic_bool stop_requested_{ true };
+    std::atomic_bool stop_requested_{true};
 
     mutable std::mutex state_mutex_;
     bool running_ = false;
@@ -124,7 +145,4 @@ private:
     uint64_t right_frame_count_ = 0;
     uint64_t dropped_frame_count_ = 0;
     uint64_t write_failure_count_ = 0;
-
-    mutable VarjoToolkit::SampleRateCounter left_rate_counter_;
-    mutable VarjoToolkit::SampleRateCounter right_rate_counter_;
 };
