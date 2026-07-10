@@ -1,6 +1,33 @@
 # Changelog
 
-## Unreleased
+## v0.5.0 - External frame synchronization release - 2026-07-11
+
+### Breaking changes
+
+- Removed `VarjoFrameInfo::waitSync()` from the public API.
+- `VarjoToolkit` services no longer call `varjo_WaitSync` internally.
+- Changed `VarjoIMUService::start(bool)` to `VarjoIMUService::start()`.
+- Eye tracking and IMU/head-pose services now require externally supplied frame snapshots through `submitFrameInfo()`.
+
+### Added
+
+- `VarjoFrameInfoSnapshot` now carries:
+  - synchronized view information
+  - display time and frame number
+  - Center Pose from the same synchronized frame
+  - explicit validity flags
+- `VarjoEyeTrackingProvider::submitFrameInfo()` and `VarjoEyeTrackingService::submitFrameInfo()`.
+- `VarjoIMUService::submitFrameInfo()` with a bounded asynchronous processing queue.
+- Received, processed, written, and dropped external-frame counters for IMU logging.
+- Test-only external synchronization pump used by HMD smoke and performance tests.
+
+### Changed
+
+- Rendering applications are the sole owners of `varjo_WaitSync`.
+- Eye tracking stores a bounded history of externally supplied frame snapshots for timestamp matching and gaze projection.
+- IMU/head-pose logging derives position, Euler angles, and angular velocity from the externally supplied Center Pose without another frame wait.
+- D3D11/D3D12 and service logger samples now perform synchronization in the application and distribute snapshots to services.
+- Bumped project and public version header to `0.5.0`.
 
 ## v0.4.0 - HMD service metrics and hardware test release - 2026-07-11
 
@@ -88,7 +115,7 @@
 - `samples/CMakeLists.txt`.
   - Central sample entry point for all sample projects.
 - D3D rendering samples.
-  - `VarjoD3D11RenderSample` renders a clear color and triangle through `VarjoSwapChain`, `VarjoMultiProjLayer`, and `VarjoLayerFrame`.
-  - `VarjoD3D12RenderSample` renders a clear color and triangle through the D3D12 swapchain path.
+  - `VarjoD3D11RenderSample` renders a clear color through `VarjoSwapChain`, `VarjoMultiProjLayer`, and `VarjoLayerFrame`.
+  - `VarjoD3D12RenderSample` renders a clear color through the D3D12 swapchain path.
 - Video post process wrapper and tests.
   - `VarjoVideoPostProcessShader` wraps Varjo Native SDK experimental Video Post Process Shader API.
