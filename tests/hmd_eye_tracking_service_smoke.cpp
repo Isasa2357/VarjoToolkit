@@ -48,46 +48,55 @@ void runEyeTrackingServiceSmokeTest()
         2000,
         5);
 
-    if (!service.start()) {
-        throw std::runtime_error("VarjoEyeTrackingService::start failed");
+    const int cycles = vtk_hmd_service_test::restartCycleCount();
+    std::cout << "Eye tracking restart cycles=" << cycles << '\n';
+
+    for (int cycle = 0; cycle < cycles; ++cycle) {
+        if (!service.start()) {
+            throw std::runtime_error("VarjoEyeTrackingService::start failed at cycle " + std::to_string(cycle));
+        }
+
+        vtk_hmd_service_test::StopGuard<VarjoEyeTrackingService> stopGuard(service);
+        VTK_HMD_TEST_REQUIRE(service.getSamplesPerSecond() == 0.0);
+
+        const double sampleRate = vtk_hmd_service_test::waitForPositiveRate(
+            "Eye tracking",
+            [&]() { return service.getSamplesPerSecond(); },
+            [&]() { return service.receivedSampleCount(); });
+
+        const uint64_t receivedBeforeRequest = service.receivedSampleCount();
+        auto samples = service.requestData();
+        const uint64_t receivedAfterRequest = service.receivedSampleCount();
+        const double rateAfterRequest = service.getSamplesPerSecond();
+
+        if (samples.empty()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(250));
+            samples = service.requestData();
+        }
+
+        stopGuard.stop();
+
+        std::cout
+            << "Eye tracking cycle=" << cycle
+            << " received=" << service.receivedSampleCount()
+            << " samplesReturned=" << samples.size()
+            << " samplesPerSecond=" << sampleRate
+            << " rateAfterRequest=" << rateAfterRequest
+            << '\n';
+
+        VTK_HMD_TEST_REQUIRE(receivedBeforeRequest > 0);
+        VTK_HMD_TEST_REQUIRE(receivedAfterRequest >= receivedBeforeRequest);
+        VTK_HMD_TEST_REQUIRE(service.receivedSampleCount() >= receivedAfterRequest);
+        VTK_HMD_TEST_REQUIRE(sampleRate > 0.0);
+        VTK_HMD_TEST_REQUIRE(rateAfterRequest > 0.0);
+        VTK_HMD_TEST_REQUIRE(!samples.empty());
+
+        const auto& sample = samples.back();
+        VTK_HMD_TEST_REQUIRE(sample.gaze.captureTime > 0);
+        VTK_HMD_TEST_REQUIRE(!sample.frameInfo.views.empty());
+        VTK_HMD_TEST_REQUIRE(sample.frameInfo.displayTime > 0);
     }
 
-    vtk_hmd_service_test::StopGuard<VarjoEyeTrackingService> stopGuard(service);
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(1250));
-    const double warmupReportedRate = service.getSamplesPerSecond();
-    const auto warmupSamples = service.requestData();
-    std::cout
-        << "Eye tracking warmup samples=" << warmupSamples.size()
-        << " getterSamplesPerSecond=" << warmupReportedRate
-        << '\n';
-
-    const auto measurementStart = std::chrono::steady_clock::now();
-    std::this_thread::sleep_for(std::chrono::milliseconds(1250));
-    const double getterSamplesPerSecond = service.getSamplesPerSecond();
-    const auto measuredSamples = service.requestData();
-    const double elapsedSeconds = std::chrono::duration<double>(
-        std::chrono::steady_clock::now() - measurementStart).count();
-    const double observedSamplesPerSecond = static_cast<double>(measuredSamples.size()) / elapsedSeconds;
-
-    std::cout
-        << "Eye tracking measured samples=" << measuredSamples.size()
-        << " elapsedSeconds=" << elapsedSeconds
-        << " observedSamplesPerSecond=" << observedSamplesPerSecond
-        << " getterSamplesPerSecond=" << getterSamplesPerSecond
-        << '\n';
-
-    VTK_HMD_TEST_REQUIRE(!warmupSamples.empty() || !measuredSamples.empty());
-    VTK_HMD_TEST_REQUIRE(!measuredSamples.empty());
-    VTK_HMD_TEST_REQUIRE(observedSamplesPerSecond > 0.0);
-    VTK_HMD_TEST_REQUIRE(getterSamplesPerSecond > 0.0);
-
-    const auto& sample = measuredSamples.back();
-    VTK_HMD_TEST_REQUIRE(sample.gaze.captureTime > 0);
-    VTK_HMD_TEST_REQUIRE(!sample.frameInfo.views.empty());
-    VTK_HMD_TEST_REQUIRE(sample.frameInfo.displayTime > 0);
-
-    stopGuard.stop();
     vtk_hmd_service_test::requireNonEmptyFile(csvPath);
 }
 
