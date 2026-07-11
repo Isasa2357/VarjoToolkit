@@ -568,20 +568,70 @@ VarjoEyeTrackingProvider::getEyeTrackingData()
     const auto ipdAdjustmentMode = getIPDAdjustmentMode();
     const auto renderingGaze = getRenderingGaze();
 
+    const varjo_Nanoseconds firstCaptureTime =
+        gazeAndMeasurements.front().first.captureTime;
+    const varjo_Nanoseconds lastCaptureTime =
+        gazeAndMeasurements.back().first.captureTime;
+    const varjo_Nanoseconds rangeBeginTime =
+        std::min(firstCaptureTime, lastCaptureTime);
+    const varjo_Nanoseconds rangeEndTime =
+        std::max(firstCaptureTime, lastCaptureTime);
+
     std::vector<FrameInfo> frameInfoCopy;
-    std::optional<FrameInfo> renderingFrameInfo;
+    size_t sourceHistorySize = 0;
     {
         std::lock_guard<std::mutex> lock(frameInfoMtx_);
-        frameInfoCopy.assign(frameInfos_.begin(), frameInfos_.end());
-        if (renderingGaze.has_value()) {
-            renderingFrameInfo = findFrameInfoAtOrBeforeOrClosestBoundary(
-                frameInfoCopy,
-                renderingGaze->captureTime);
+        sourceHistorySize = frameInfos_.size();
+        if (!frameInfos_.empty()) {
+            const auto comparator =
+                [](varjo_Nanoseconds targetTime, const FrameInfo& frameInfo) {
+                    return targetTime < frameInfo.displayTime;
+                };
+
+            auto rangeBegin = std::upper_bound(
+                frameInfos_.begin(),
+                frameInfos_.end(),
+                rangeBeginTime,
+                comparator);
+            if (rangeBegin != frameInfos_.begin()) {
+                --rangeBegin;
+            }
+
+            auto rangeEnd = std::upper_bound(
+                frameInfos_.begin(),
+                frameInfos_.end(),
+                rangeEndTime,
+                comparator);
+            if (rangeEnd == frameInfos_.begin()) {
+                rangeEnd = frameInfos_.begin();
+            } else {
+                --rangeEnd;
+            }
+
+            for (auto iterator = rangeBegin;; ++iterator) {
+                FrameInfo copiedFrameInfo{};
+                copyFrameInfo(*iterator, copiedFrameInfo);
+                frameInfoCopy.push_back(std::move(copiedFrameInfo));
+                if (iterator == rangeEnd) break;
+            }
         }
     }
 
+    VTK_SD_TRACE("VarjoEyeTrackingProvider copied required frame history firstCaptureTime="
+        << firstCaptureTime
+        << " lastCaptureTime=" << lastCaptureTime
+        << " sourceHistorySize=" << sourceHistorySize
+        << " copiedFrameCount=" << frameInfoCopy.size());
+
     if (frameInfoCopy.empty()) {
         frameInfoCopy.push_back(makeEmptyFrameInfo(static_cast<size_t>(viewCount_)));
+    }
+
+    std::optional<FrameInfo> renderingFrameInfo;
+    if (renderingGaze.has_value()) {
+        renderingFrameInfo = findFrameInfoAtOrBeforeOrClosestBoundary(
+            frameInfoCopy,
+            renderingGaze->captureTime);
     }
 
     std::optional<VarjoProjectedGazePosition> renderingVideoPosition;
