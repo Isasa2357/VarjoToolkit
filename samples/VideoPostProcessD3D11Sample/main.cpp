@@ -273,6 +273,7 @@ const char* kVideoPostProcessShader = R"hlsl(
 #define BLOCK_SIZE 8
 #define VIEW_FOCUS_L 2
 #define VIEW_FOCUS_R 3
+#define FLIP_FOCUS_Y 1
 
 Texture2D<float4> inputTex : register(t0);
 RWTexture2D<float4> outputTex : register(u0);
@@ -320,7 +321,10 @@ float2 sourcePixelToContextPixel(float2 sourcePixelCenter)
     }
 
     const float2 sourceExtent = max(float2(sourceSize), float2(1.0f, 1.0f));
-    const float2 focusUv = sourcePixelCenter / sourceExtent;
+    float2 focusUv = saturate(sourcePixelCenter / sourceExtent);
+#if FLIP_FOCUS_Y
+    focusUv.y = 1.0f - focusUv.y;
+#endif
     const float2 focusTopLeft = float2(sourceFocusRect.xy);
     const float2 focusBottomRight = float2(sourceFocusRect.zw);
     return lerp(focusTopLeft, focusBottomRight, focusUv);
