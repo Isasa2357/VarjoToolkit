@@ -260,6 +260,8 @@ ComPtr<ID3DBlob> compileShader(const char* source)
 
 const char* kVideoPostProcessShader = R"hlsl(
 #define BLOCK_SIZE 8
+#define VIEW_FOCUS_L 2
+#define VIEW_FOCUS_R 3
 
 Texture2D<float4> inputTex : register(t0);
 RWTexture2D<float4> outputTex : register(u0);
@@ -293,6 +295,26 @@ cbuffer UserConstants : register(b1)
     float userPadding;
 };
 
+bool isFocusView()
+{
+    return viewIndex == VIEW_FOCUS_L || viewIndex == VIEW_FOCUS_R;
+}
+
+// sourceFocusRect.xy is the top-left and sourceFocusRect.zw is the
+// bottom-right of the focus view in absolute context-view pixels.
+float2 sourcePixelToContextPixel(float2 sourcePixelCenter)
+{
+    if (!isFocusView()) {
+        return sourcePixelCenter;
+    }
+
+    const float2 sourceExtent = max(float2(sourceSize), float2(1.0f, 1.0f));
+    const float2 focusUv = sourcePixelCenter / sourceExtent;
+    const float2 focusTopLeft = float2(sourceFocusRect.xy);
+    const float2 focusBottomRight = float2(sourceFocusRect.zw);
+    return lerp(focusTopLeft, focusBottomRight, focusUv);
+}
+
 [numthreads(BLOCK_SIZE, BLOCK_SIZE, 1)]
 void main(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
@@ -304,8 +326,15 @@ void main(uint3 dispatchThreadID : SV_DispatchThreadID)
     const float4 original = inputTex.Load(int3(pixel, 0));
     float4 color = original;
 
-    const float2 normalizedShortAxis = (float2(pixel) + 0.5f - float2(sourceSize) * 0.5f) / max(min(sourceSize.x, sourceSize.y), 1);
-    const float d = length(normalizedShortAxis - float2(centerX - 0.5f, centerY - 0.5f));
+    const float2 contextSize = max(float2(sourceContextSize), float2(1.0f, 1.0f));
+    const float shortAxis = max(min(contextSize.x, contextSize.y), 1.0f);
+    const float2 contextPixel = sourcePixelToContextPixel(float2(pixel) + 0.5f);
+    const float2 contextCenter = contextSize * 0.5f + (float2(centerX, centerY) - 0.5f) * shortAxis;
+
+    float2 delta = (contextPixel - contextCenter) / shortAxis;
+    delta.x *= aspectScale;
+
+    const float d = length(delta);
     const float outside = smoothstep(radius, radius + max(feather, 0.001f), d);
     const float animatedDim = saturate(dimStrength * lerp(0.85f, 1.15f, saturate(pulse)));
     color.rgb *= lerp(1.0f, 1.0f - animatedDim, outside);
